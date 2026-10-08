@@ -131,7 +131,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Per tool:
 #   adapter             dotted path of the adapter class
 #   kind                "subprocess" (CLI) or "http" (externally hosted, MES-REQ-1-005)
-#   invocation_command  binary path for subprocess tools, base URL for http tools
+#   invocation_command  binary path for subprocess tools (optional: defaults to the
+#                       adapter's own command), base URL for http tools (required)
 #   extra_args          extra CLI args (subprocess tools only)
 #   timeout_seconds     per-invocation timeout
 #   enabled             disabled tools are never selected

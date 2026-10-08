@@ -81,7 +81,7 @@ class ExtractionOrchestrator:
             adapter = adapter_class(base_url=tool.invocation_command, timeout_seconds=tool.timeout_seconds)
         else:
             adapter = adapter_class(
-                invocation_command=tool.invocation_command,
+                invocation_command=tool.invocation_command,  # None keeps the adapter's default
                 extra_args=list(tool.extra_args),
                 timeout_seconds=tool.timeout_seconds,
             )

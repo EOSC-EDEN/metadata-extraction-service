@@ -42,3 +42,13 @@ class ToolConfigTests(SimpleTestCase):
     def test_validate_rejects_unknown_kind(self):
         with self.assertRaises(ImproperlyConfigured):
             validate_tool_config()
+
+    @override_settings(MES_TOOLS={"exiftool": {k: v for k, v in _TOOL.items() if k != "invocation_command"}})
+    def test_subprocess_invocation_command_is_optional(self):
+        validate_tool_config()
+        self.assertIsNone(get_tool_config("exiftool").invocation_command)
+
+    @override_settings(MES_TOOLS={"tika": {"adapter": _TOOL["adapter"], "kind": "http"}})
+    def test_http_tool_requires_invocation_command(self):
+        with self.assertRaises(ImproperlyConfigured):
+            validate_tool_config()

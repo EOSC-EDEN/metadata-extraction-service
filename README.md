@@ -34,6 +34,10 @@ The service generates its OpenAPI 3 description with Django REST framework's bui
 | `GET /api/v1/schema/result.json` | JSON Schema of the extraction result. |
 | `GET /api/v1/schema/result.xsd` | XSD of the XML extraction result. |
 
+## Adding extraction tools
+
+See [`docs/adding-a-tool.md`](docs/adding-a-tool.md) for a step-by-step guide to configuring a new extraction tool.
+
 ## Contributing
 
 Contributions are welcome via pull request. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch policy and pull request process, and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for expected standards of behaviour.

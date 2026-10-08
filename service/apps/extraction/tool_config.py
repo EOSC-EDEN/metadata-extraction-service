@@ -20,7 +20,8 @@ class ToolConfig:
     name: str
     adapter: str
     kind: str
-    invocation_command: str
+    #: None means "use the adapter's own default" (subprocess tools only).
+    invocation_command: str | None = None
     extra_args: tuple[str, ...] = ()
     timeout_seconds: int = 30
     enabled: bool = True
@@ -37,7 +38,7 @@ def _build(name: str, entry: dict) -> ToolConfig:
             name=name,
             adapter=entry["adapter"],
             kind=entry["kind"],
-            invocation_command=entry["invocation_command"],
+            invocation_command=entry.get("invocation_command"),
             extra_args=tuple(entry.get("extra_args", ())),
             timeout_seconds=entry.get("timeout_seconds", 30),
             enabled=entry.get("enabled", True),
@@ -50,6 +51,10 @@ def _build(name: str, entry: dict) -> ToolConfig:
     if config.kind not in KINDS:
         raise ImproperlyConfigured(
             f"settings.MES_TOOLS['{name}']['kind'] must be one of {KINDS}, got '{config.kind}'."
+        )
+    if config.kind == "http" and not config.invocation_command:
+        raise ImproperlyConfigured(
+            f"settings.MES_TOOLS['{name}'] is an http tool and requires 'invocation_command' (the base URL)."
         )
     return config
 
