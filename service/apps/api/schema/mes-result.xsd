@@ -74,6 +74,7 @@
               <xs:element name="mimeType" type="xs:string" minOccurs="0"/>
               <xs:element name="resolvedTools" type="textListType"/>
               <xs:element name="selectionMethod" type="xs:string"/>
+              <xs:element name="identificationUrl" type="xs:string" minOccurs="0"/>
             </xs:sequence>
           </xs:complexType>
         </xs:element>

@@ -50,6 +50,7 @@ class BaseToolAdapter(ABC):
         if tool_name is not None:
             self.tool_name = tool_name
         self._last_command: tuple[str, ...] | None = None
+        self._last_warnings: list[str] = []
 
     @abstractmethod
     def invoke(self, file_path) -> tuple[str, str]:
@@ -87,7 +88,7 @@ class BaseToolAdapter(ABC):
             finished_at=finished_at,
             command=self._last_command,
             errors=errors,
-            warnings=[],
+            warnings=list(self._last_warnings),
         )
 
 
@@ -134,6 +135,9 @@ class SubprocessToolAdapter(BaseToolAdapter):
             timeout=self.timeout_seconds,
             check=True,
         )
+        # A tool that exits 0 but writes to stderr is reporting warnings (MES-REQ-5-001).
+        if result.stderr and result.stderr.strip():
+            self._last_warnings = [result.stderr.strip()]
         return result.stdout, self.raw_output_format
 
 

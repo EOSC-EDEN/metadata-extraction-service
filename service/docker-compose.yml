@@ -1,0 +1,21 @@
+services:
+  mes:
+    container_name: eosc-mes
+    build:
+      context: .
+      args:
+        INSTALL_EXIFTOOL: ${INSTALL_EXIFTOOL:-true}
+        INSTALL_MEDIAINFO: ${INSTALL_MEDIAINFO:-true}
+        INSTALL_FFPROBE: ${INSTALL_FFPROBE:-false}
+        INSTALL_IMAGEMAGICK: ${INSTALL_IMAGEMAGICK:-false}
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      MES_DEFAULT_TOOL: ${MES_DEFAULT_TOOL:-exiftool}
+      MES_FFIS_ENABLED: ${MES_FFIS_ENABLED:-false}
+      # Point at a running FFIS instance (e.g. http://host.docker.internal:8001).
+      MES_FFIS_BASE_URL: ${MES_FFIS_BASE_URL:-}
+      MES_FFIS_TIMEOUT_SECONDS: ${MES_FFIS_TIMEOUT_SECONDS:-30}
+    restart: unless-stopped

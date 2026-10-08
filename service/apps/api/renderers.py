@@ -88,6 +88,7 @@ def build_result_element(data: dict) -> ET.Element:
     _text(res_el, "mimeType", resolution["mime_type"])
     _text_list(res_el, "resolvedTools", resolution["resolved_tools"])
     _text(res_el, "selectionMethod", resolution["selection_method"])
+    _text(res_el, "identificationUrl", resolution["identification_url"])
 
     results_el = ET.SubElement(root, _q("results"))
     for result in data["results"]:

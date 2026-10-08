@@ -91,6 +91,10 @@ class RunAggregationTests(SimpleTestCase):
         self.assertEqual(statuses["exiftool"], ToolExecutionStatus.SUCCESS)
         self.assertEqual(statuses["mediainfo"], ToolExecutionStatus.FAILURE)
         self.assertEqual(result.errors, [])  # mediainfo isn't mandatory here
+        # ...but the failure is still surfaced at the top level (MES-REQ-5-001).
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn("mediainfo", result.warnings[0])
+        self.assertIn("boom", result.warnings[0])
 
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
     def test_mandatory_tool_failure_surfaces_top_level_error_but_keeps_other_results(
@@ -109,6 +113,7 @@ class RunAggregationTests(SimpleTestCase):
         self.assertEqual(len(result.results), 2)
         self.assertEqual(len(result.errors), 1)
         self.assertIn("exiftool", result.errors[0])
+        self.assertIn("boom", result.errors[0])
         mediainfo_result = next(r for r in result.results if r.tool_name == "mediainfo")
         self.assertEqual(mediainfo_result.status, ToolExecutionStatus.SUCCESS)
 
@@ -130,3 +135,14 @@ class RunAggregationTests(SimpleTestCase):
 
         self.assertEqual(result.results[0].status, ToolExecutionStatus.FAILURE)
         self.assertIn("boom", result.results[0].errors[0])
+
+
+class ToolStderrWarningTests(SimpleTestCase):
+    @mock.patch("apps.extraction.adapters.base.subprocess.run")
+    def test_stderr_on_successful_run_becomes_tool_warning(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="{}", stderr="Warning: minor issue\n"
+        )
+        result = ExtractionOrchestrator()._run([_unsaved_tool("exiftool")], "stub", "/tmp/f.jpg")
+        self.assertEqual(result.results[0].status, ToolExecutionStatus.SUCCESS)
+        self.assertEqual(result.results[0].warnings, ["Warning: minor issue"])

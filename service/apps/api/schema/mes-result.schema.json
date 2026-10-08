@@ -12,12 +12,16 @@
     "tool_resolution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["puid", "mime_type", "resolved_tools", "selection_method"],
+      "required": ["puid", "mime_type", "resolved_tools", "selection_method", "identification_url"],
       "properties": {
         "puid": {"type": ["string", "null"]},
         "mime_type": {"type": ["string", "null"]},
         "resolved_tools": {"type": "array", "items": {"type": "string"}},
-        "selection_method": {"type": "string"}
+        "selection_method": {"type": "string"},
+        "identification_url": {
+          "description": "Base URL of the format identification service (FFIS) consulted for this request; null when it was not called.",
+          "type": ["string", "null"]
+        }
       }
     },
     "results": {

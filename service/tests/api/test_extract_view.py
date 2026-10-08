@@ -59,3 +59,13 @@ class ExtractViewTests(TestCase):
         response = self.client.post(self.url, {"file": _upload()}, format="multipart")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"][0]["status"], "failure")
+
+    @mock.patch(
+        "apps.api.views.ExtractionOrchestrator.extract", side_effect=RuntimeError("secret detail")
+    )
+    def test_unexpected_error_is_json_500_without_internals(self, _extract):
+        client = APIClient(raise_request_exception=False)
+        response = client.post(self.url, {"file": _upload()}, format="multipart")
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(response.json()["errors"])
+        self.assertNotIn("secret detail", response.content.decode())

@@ -6,6 +6,8 @@ from apps.extraction.services.tool_resolution import resolve_tools
 
 
 class FakeFFISClient:
+    base_url = "http://ffis.test"
+
     def __init__(self, result=None, error=None):
         self.result = result
         self.error = error
@@ -38,6 +40,7 @@ class ResolveToolsTests(TestCase):
         self.assertEqual(ffis.calls, [])
         self.assertEqual(resolution.selection_method, "default_tool_ffis_disabled")
         self.assertEqual(resolution.warnings, [])
+        self.assertIsNone(resolution.identification_url)
 
     @override_settings(MES_FFIS_ENABLED=True)
     def test_ffis_identifies_records_identifier_and_warnings(self):
@@ -52,6 +55,7 @@ class ResolveToolsTests(TestCase):
         self.assertEqual((resolution.puid, resolution.mime_type), ("fmt/43", "image/jpeg"))
         self.assertEqual(resolution.warnings, ["w"])
         self.assertEqual(resolution.ffis_provenance, {"outcome": "warning"})
+        self.assertEqual(resolution.identification_url, "http://ffis.test")
         self.assertEqual([t.name for t in resolution.tools], ["exiftool"])
 
     @override_settings(MES_FFIS_ENABLED=True)

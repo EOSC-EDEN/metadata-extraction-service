@@ -56,6 +56,7 @@ def serialize_extraction_result(
             "mime_type": result.mime_type,
             "resolved_tools": list(result.resolved_tools),
             "selection_method": result.selection_method,
+            "identification_url": result.identification_url,
         },
         "results": [_serialize_tool_result(r) for r in result.results],
         "provenance": {

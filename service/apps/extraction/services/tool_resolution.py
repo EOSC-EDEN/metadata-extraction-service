@@ -24,6 +24,8 @@ class ToolResolution:
     mime_type: str | None = None
     warnings: list[str] = field(default_factory=list)
     ffis_provenance: dict | None = None
+    #: Base URL of the identification service (FFIS) when it was consulted for this request.
+    identification_url: str | None = None
 
 
 def resolve_tools(file_path, puid=None, mime_type=None, ffis_client=None) -> ToolResolution:
@@ -41,16 +43,20 @@ def resolve_tools(file_path, puid=None, mime_type=None, ffis_client=None) -> Too
         return resolution("default_tool_ffis_disabled")
 
     client = ffis_client or FFISClient()
+    identification_url = getattr(client, "base_url", None) or None
     try:
         identified = client.identify(file_path)
     except FFISUnavailable as exc:
         return resolution(
-            "default_tool_ffis_unreachable", warnings=[f"ffis_unreachable: {exc}"]
+            "default_tool_ffis_unreachable",
+            warnings=[f"ffis_unreachable: {exc}"],
+            identification_url=identification_url,
         )
     if identified is None:
         return resolution(
             "default_tool_ffis_inconclusive",
             warnings=["ffis_inconclusive: FFIS could not identify the file's format."],
+            identification_url=identification_url,
         )
     return resolution(
         "default_tool_ffis_identified",
@@ -58,4 +64,5 @@ def resolve_tools(file_path, puid=None, mime_type=None, ffis_client=None) -> Too
         mime_type=identified.mime_type,
         warnings=list(identified.engine_warnings),
         ffis_provenance=identified.provenance,
+        identification_url=identification_url,
     )

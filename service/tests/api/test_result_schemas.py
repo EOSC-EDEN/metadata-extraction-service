@@ -36,6 +36,7 @@ def _sample(**overrides):
             "mime_type": None,
             "resolved_tools": ["exiftool"],
             "selection_method": "default_tool_caller_identified",
+            "identification_url": "http://ffis.example:8001",
         },
         "results": [
             {

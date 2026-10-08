@@ -131,7 +131,15 @@
       color: #4f6ef7;
       margin-bottom: .2rem;
     }
-    .id-chip .value { font-size: .92rem; font-family: monospace; }
+    .id-chip { min-width: 0; }
+    .id-chip .value { font-size: .92rem; font-family: monospace; overflow-wrap: anywhere; word-break: break-word; }
+    .id-chip.error .value { color: #c00; }
+
+    /* Identification service details (MES addition) */
+    .id-section { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e6e9f5; }
+    .id-section-title { font-size: .88rem; color: #444; margin-bottom: .75rem; overflow-wrap: anywhere; }
+    .id-section-title b { color: #1a1a2e; }
+    .id-section-title code { font-size: .82rem; background: #f0f3ff; border-radius: 4px; padding: .1rem .4rem; }
     .id-chip a { color: inherit; text-decoration: underline dotted; }
 
     /* File meta */
@@ -323,6 +331,10 @@
         <div class="primary-format" id="format-name"></div>
         <div class="primary-sub" id="format-sub"></div>
         <div class="id-grid" id="id-grid"></div>
+        <div class="id-section" id="id-section" style="display:none">
+          <div class="id-section-title" id="id-source"></div>
+          <div class="id-grid" id="id-engines"></div>
+        </div>
       </div>
     </div>
 
@@ -487,6 +499,29 @@
     document.getElementById('format-sub').textContent =
       [SELECTION_DESC[res.selection_method] || res.selection_method, OUTCOME_DESC[outcome]]
         .filter(Boolean).join(' · ');
+
+    // ── Identification service ──────────────────────────────────────────────
+    const idSection = document.getElementById('id-section');
+    if (res.identification_url) {
+      document.getElementById('id-source').innerHTML =
+        `<b>Identified by</b> FFIS &nbsp;<code>${esc(res.identification_url)}</code>`;
+      idSection.style.display = '';
+    } else {
+      idSection.style.display = 'none';
+    }
+
+    // ── Identification engines (FFIS provenance) ────────────────────────────
+    const engines = document.getElementById('id-engines');
+    engines.innerHTML = '';
+    ((d.provenance || {}).ffis?.tools || []).forEach(t => {
+      const chip = document.createElement('div');
+      chip.className = 'id-chip' + (t.error ? ' error' : '');
+      const ids = (t.identifiers || []).map(i => i.value).filter(Boolean).join(', ');
+      const detail = t.error ? `✗ ${t.error}` : (ids || 'no identifier');
+      chip.innerHTML = `<div class="scheme">${esc(t.name)}${t.version ? ' ' + esc(t.version) : ''}</div>`
+        + `<div class="value">${esc(detail)}</div>`;
+      engines.appendChild(chip);
+    });
 
     // ── Identifier chips ─────────────────────────────────────────────────────
     const grid = document.getElementById('id-grid');

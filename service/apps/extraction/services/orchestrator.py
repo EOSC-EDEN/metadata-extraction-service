@@ -31,6 +31,7 @@ class AggregatedExtractionResult:
     mime_type: str | None = None
     #: FFIS's per-engine provenance, present only when FFIS identified the file.
     ffis_provenance: dict | None = None
+    identification_url: str | None = None
 
 
 class ExtractionOrchestrator:
@@ -46,15 +47,18 @@ class ExtractionOrchestrator:
     ) -> AggregatedExtractionResult:
         results = self._invoke_tools(tools, file_path)
         errors = self._mandatory_tool_errors(tools, results)
+        warnings = list(resolution.warnings) if resolution else []
+        warnings.extend(self._optional_tool_warnings(tools, results))
         return AggregatedExtractionResult(
             resolved_tools=tuple(tool.name for tool in tools),
             selection_method=selection_method,
             results=tuple(results),
             errors=errors,
-            warnings=list(resolution.warnings) if resolution else [],
+            warnings=warnings,
             puid=resolution.puid if resolution else None,
             mime_type=resolution.mime_type if resolution else None,
             ffis_provenance=resolution.ffis_provenance if resolution else None,
+            identification_url=resolution.identification_url if resolution else None,
         )
 
     def _invoke_tools(self, tools, file_path) -> list[ToolInvocationResult]:
@@ -106,5 +110,25 @@ class ExtractionOrchestrator:
                 continue
             result = results_by_name.get(tool.name)
             if result is None or result.status != ToolExecutionStatus.SUCCESS:
-                errors.append(f"Mandatory tool '{tool.name}' did not complete successfully.")
+                errors.append(_describe_incomplete(tool.name, result, "Mandatory tool"))
         return errors
+
+    def _optional_tool_warnings(self, tools, results) -> list[str]:
+        """Surface non-mandatory tool failures at the top level, not only per tool (MES-REQ-5-001)."""
+        results_by_name = {result.tool_name: result for result in results}
+        warnings = []
+        for tool in tools:
+            if tool.is_mandatory:
+                continue
+            result = results_by_name.get(tool.name)
+            if result is None or result.status != ToolExecutionStatus.SUCCESS:
+                warnings.append(_describe_incomplete(tool.name, result, "Tool"))
+        return warnings
+
+
+def _describe_incomplete(name, result, label) -> str:
+    status = result.status.value if result else "no result"
+    message = f"{label} '{name}' did not complete successfully ({status})."
+    if result and result.errors:
+        message += " " + "; ".join(result.errors)
+    return message
