@@ -11,14 +11,14 @@ from dataclasses import dataclass, field
 
 from django.conf import settings
 
-from apps.extraction.exceptions import FFISUnavailable, ToolNotConfigured
-from apps.extraction.models import ExtractionTool
+from apps.extraction.exceptions import FFISUnavailable
 from apps.extraction.services.format_identification import FFISClient
+from apps.extraction.tool_config import ToolConfig, get_default_tool
 
 
 @dataclass(frozen=True)
 class ToolResolution:
-    tools: list[ExtractionTool]
+    tools: list[ToolConfig]
     selection_method: str
     puid: str | None = None
     mime_type: str | None = None
@@ -27,9 +27,7 @@ class ToolResolution:
 
 
 def resolve_tools(file_path, puid=None, mime_type=None, ffis_client=None) -> ToolResolution:
-    default_tool = ExtractionTool.objects.filter(is_enabled=True, is_default=True).first()
-    if default_tool is None:
-        raise ToolNotConfigured("No enabled default ExtractionTool is configured (MES-REQ-1-001).")
+    default_tool = get_default_tool()  # raises ToolNotConfigured (MES-REQ-1-001)
 
     def resolution(selection_method, **kwargs):
         return ToolResolution(

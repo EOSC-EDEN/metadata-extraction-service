@@ -4,22 +4,20 @@ from unittest import mock
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.extraction.adapters.base import ToolExecutionStatus
-from apps.extraction.models import ExtractionTool
 from apps.extraction.services.format_identification import FFISResolution
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
+from apps.extraction.tool_config import ToolConfig
 
 
 def _unsaved_tool(name, is_mandatory=False):
-    """An in-memory ExtractionTool for exercising _run() without the DB."""
-    return ExtractionTool(
+    """An in-memory ToolConfig for exercising _run() without settings."""
+    return ToolConfig(
         name=name,
-        display_name=name,
-        adapter_kind=ExtractionTool.AdapterKind.SUBPROCESS,
+        adapter="",
+        kind="subprocess",
         invocation_command=name,
-        extra_args=[],
         timeout_seconds=5,
-        is_enabled=True,
-        is_mandatory=is_mandatory,
+        mandatory=is_mandatory,
     )
 
 

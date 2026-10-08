@@ -1,8 +1,7 @@
 """ExtractionOrchestrator: resolve tools -> invoke adapters -> assemble a result.
 
-A plain DTO-returning service, no Django/DRF dependency beyond the ORM read
-in `_resolve_tools`. MES-REQ-3-006: a mandatory tool's failure surfaces as a
-top-level error without suppressing the other tools' results — a
+A plain DTO-returning service, no Django/DRF dependency beyond settings. MES-REQ-3-006: a mandatory
+tool's failure surfaces as a top-level error without suppressing the other tools' results — a
 non-mandatory tool's failure is just one more per-tool result.
 
 Tool selection lives in `services/tool_resolution.py` (FFIS identification,
@@ -17,8 +16,8 @@ from django.conf import settings
 
 from apps.extraction.adapters.base import HTTPToolAdapter, ToolExecutionStatus, ToolInvocationResult
 from apps.extraction.adapters.registry import get_adapter_class
-from apps.extraction.models import ExtractionTool
 from apps.extraction.services.tool_resolution import ToolResolution, resolve_tools
+from apps.extraction.tool_config import ToolConfig
 
 
 @dataclass(frozen=True)
@@ -72,19 +71,19 @@ class ExtractionOrchestrator:
                     results.append(self._failure_result(tool, exc))
         return results
 
-    def _invoke_one(self, tool: ExtractionTool, file_path) -> ToolInvocationResult:
+    def _invoke_one(self, tool: ToolConfig, file_path) -> ToolInvocationResult:
         adapter_class = get_adapter_class(tool.name)
         if issubclass(adapter_class, HTTPToolAdapter):
             adapter = adapter_class(base_url=tool.invocation_command, timeout_seconds=tool.timeout_seconds)
         else:
             adapter = adapter_class(
                 invocation_command=tool.invocation_command,
-                extra_args=tool.extra_args,
+                extra_args=list(tool.extra_args),
                 timeout_seconds=tool.timeout_seconds,
             )
         return adapter.run(file_path)
 
-    def _failure_result(self, tool: ExtractionTool, exc: Exception) -> ToolInvocationResult:
+    def _failure_result(self, tool: ToolConfig, exc: Exception) -> ToolInvocationResult:
         now = datetime.now(timezone.utc)
         return ToolInvocationResult(
             tool_name=tool.name,

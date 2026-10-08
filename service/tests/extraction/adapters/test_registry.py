@@ -19,7 +19,7 @@ class ValidateAdapterClassesTests(SimpleTestCase):
         validate_adapter_classes()  # must not raise
 
     @override_settings(
-        MES_ADAPTER_CLASSES={"broken": "apps.extraction.adapters.does_not_exist.NopeAdapter"}
+        MES_TOOLS={"broken": {"adapter": "apps.extraction.adapters.does_not_exist.NopeAdapter"}}
     )
     def test_raises_for_an_unimportable_adapter_class(self):
         with self.assertRaises(ImproperlyConfigured):

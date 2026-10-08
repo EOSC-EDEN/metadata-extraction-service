@@ -8,5 +8,7 @@ class ExtractionConfig(AppConfig):
 
     def ready(self):
         from .adapters.registry import validate_adapter_classes
+        from .tool_config import validate_tool_config
 
+        validate_tool_config()
         validate_adapter_classes()

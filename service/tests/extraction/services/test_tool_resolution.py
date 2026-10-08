@@ -1,7 +1,6 @@
 from django.test import TestCase, override_settings
 
 from apps.extraction.exceptions import FFISUnavailable, ToolNotConfigured
-from apps.extraction.models import ExtractionTool
 from apps.extraction.services.format_identification import FFISResolution
 from apps.extraction.services.tool_resolution import resolve_tools
 
@@ -73,9 +72,8 @@ class ResolveToolsTests(TestCase):
         self.assertIn("ffis_unreachable", resolution.warnings[0])
         self.assertIn("down", resolution.warnings[0])
 
-    @override_settings(MES_FFIS_ENABLED=True)
+    @override_settings(MES_FFIS_ENABLED=True, MES_DEFAULT_TOOL="")
     def test_no_default_tool_raises_before_calling_ffis(self):
-        ExtractionTool.objects.update(is_default=False)
         ffis = FakeFFISClient()
 
         with self.assertRaises(ToolNotConfigured):

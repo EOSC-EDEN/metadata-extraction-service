@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.extraction",
     "apps.api",
+    "apps.ui",
 ]
 
 MIDDLEWARE = [
@@ -123,13 +124,42 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Metadata Extraction Service
-# Maps an ExtractionTool.name to its adapter class (MES-REQ-4-007): adding a
-# new tool means adding an entry here, not changing orchestration code.
+# Extraction tools are configured here (override per environment in
+# dev/prod/test settings). Adding a new tool means adding an entry plus an
+# adapter class, not changing orchestration code (MES-REQ-4-007).
+#
+# Per tool:
+#   adapter             dotted path of the adapter class
+#   kind                "subprocess" (CLI) or "http" (externally hosted, MES-REQ-1-005)
+#   invocation_command  binary path for subprocess tools, base URL for http tools
+#   extra_args          extra CLI args (subprocess tools only)
+#   timeout_seconds     per-invocation timeout
+#   enabled             disabled tools are never selected
+#   mandatory           failure surfaces a top-level error (MES-REQ-3-006)
 
-MES_ADAPTER_CLASSES = {
-    "exiftool": "apps.extraction.adapters.exiftool.ExifToolAdapter",
-    "mediainfo": "apps.extraction.adapters.mediainfo.MediaInfoAdapter",
+MES_TOOLS = {
+    "exiftool": {
+        "adapter": "apps.extraction.adapters.exiftool.ExifToolAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_EXIFTOOL_COMMAND", "exiftool"),
+        "extra_args": [],
+        "timeout_seconds": 30,
+        "enabled": True,
+        "mandatory": False,
+    },
+    "mediainfo": {
+        "adapter": "apps.extraction.adapters.mediainfo.MediaInfoAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_MEDIAINFO_COMMAND", "mediainfo"),
+        "extra_args": [],
+        "timeout_seconds": 30,
+        "enabled": True,
+        "mandatory": False,
+    },
 }
+
+# Tool run when no format mapping selects one (MES-REQ-1-001).
+MES_DEFAULT_TOOL = os.environ.get("MES_DEFAULT_TOOL", "exiftool")
 
 # Bound on concurrent tool invocations per extraction request.
 MES_MAX_CONCURRENT_TOOLS = 4
@@ -143,3 +173,12 @@ MES_FFIS_TIMEOUT_SECONDS = int(os.environ.get("MES_FFIS_TIMEOUT_SECONDS", "30"))
 # these against a live FFIS response (compared case-insensitively).
 MES_FFIS_PUID_SCHEMES = ("pronom", "puid")
 MES_FFIS_MIME_SCHEMES = ("mime", "mimetype", "mime-type", "media-type")
+
+REST_FRAMEWORK = {
+    # JSON is first, so it is the default when no Accept header is sent.
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "apps.api.renderers.MESXMLRenderer",
+    ],
+    "EXCEPTION_HANDLER": "apps.api.exceptions.exception_handler",
+}

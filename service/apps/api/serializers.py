@@ -1,0 +1,69 @@
+"""Request validation and response shaping for the extract endpoint.
+
+The response is built from the orchestrator's DTO as plain dicts so every
+renderer (JSON now, XML later) serialises the same structure (MES-REQ-2-005).
+Tool `raw_output` is passed through as an unmodified string (MES-REQ-3-004).
+"""
+
+from datetime import datetime, timezone
+
+from rest_framework import serializers
+
+from apps.extraction.adapters.base import ToolInvocationResult
+from apps.extraction.services.orchestrator import AggregatedExtractionResult
+
+SERVICE_VERSION = "0.1.0"
+
+
+class ExtractionRequestSerializer(serializers.Serializer):
+    file = serializers.FileField()
+    puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate_file(self, value):
+        if value.size == 0:
+            raise serializers.ValidationError("The uploaded file is empty.")
+        return value
+
+
+def _iso(value):
+    return value.isoformat() if value else None
+
+
+def _serialize_tool_result(result: ToolInvocationResult) -> dict:
+    return {
+        "tool": result.tool_name,
+        "version": result.tool_version,
+        "status": result.status.value,
+        "started_at": _iso(result.started_at),
+        "finished_at": _iso(result.finished_at),
+        "command": list(result.command) if result.command else None,
+        "raw_output": result.raw_output,
+        "raw_output_format": result.raw_output_format,
+        "errors": list(result.errors),
+        "warnings": list(result.warnings),
+    }
+
+
+def serialize_extraction_result(
+    result: AggregatedExtractionResult, request_id: str, filename: str
+) -> dict:
+    return {
+        "request_id": request_id,
+        "filename": filename,
+        "tool_resolution": {
+            "puid": result.puid,
+            "mime_type": result.mime_type,
+            "resolved_tools": list(result.resolved_tools),
+            "selection_method": result.selection_method,
+        },
+        "results": [_serialize_tool_result(r) for r in result.results],
+        "provenance": {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "service_version": SERVICE_VERSION,
+            "tool_versions": {r.tool_name: r.tool_version for r in result.results},
+            "ffis": result.ffis_provenance,
+        },
+        "errors": list(result.errors),
+        "warnings": list(result.warnings),
+    }

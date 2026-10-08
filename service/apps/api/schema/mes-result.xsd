@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML representation of the MES extraction result (MES-REQ-2-005). Mirrors
+  mes-result.schema.json: snake_case JSON keys become camelCase elements and
+  null values are omitted. A string containing characters that XML cannot
+  carry is base64-encoded and marked encoding="base64" (see textType).
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:eden:mes:result:1"
+           targetNamespace="urn:eden:mes:result:1"
+           elementFormDefault="qualified">
+
+  <xs:complexType name="textType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="encoding" use="optional">
+          <xs:simpleType>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="base64"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:attribute>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="textListType">
+    <xs:sequence>
+      <xs:element name="item" type="textType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Generic JSON value tree, used for the free-form FFIS provenance. -->
+  <xs:complexType name="valueType">
+    <xs:choice>
+      <xs:element name="object">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="member" minOccurs="0" maxOccurs="unbounded">
+              <xs:complexType>
+                <xs:complexContent>
+                  <xs:extension base="valueType">
+                    <xs:attribute name="name" type="xs:string" use="required"/>
+                  </xs:extension>
+                </xs:complexContent>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="array">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="item" type="valueType" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="string" type="textType"/>
+      <xs:element name="number" type="xs:decimal"/>
+      <xs:element name="boolean" type="xs:boolean"/>
+      <xs:element name="null"><xs:complexType/></xs:element>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:element name="extractionResult">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="requestId" type="xs:string"/>
+        <xs:element name="filename" type="textType"/>
+        <xs:element name="toolResolution">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="puid" type="xs:string" minOccurs="0"/>
+              <xs:element name="mimeType" type="xs:string" minOccurs="0"/>
+              <xs:element name="resolvedTools" type="textListType"/>
+              <xs:element name="selectionMethod" type="xs:string"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="results">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="result" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="tool" type="xs:string"/>
+                    <xs:element name="version" type="textType" minOccurs="0"/>
+                    <xs:element name="status">
+                      <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                          <xs:enumeration value="success"/>
+                          <xs:enumeration value="failure"/>
+                          <xs:enumeration value="timeout"/>
+                        </xs:restriction>
+                      </xs:simpleType>
+                    </xs:element>
+                    <xs:element name="startedAt" type="xs:dateTime" minOccurs="0"/>
+                    <xs:element name="finishedAt" type="xs:dateTime" minOccurs="0"/>
+                    <xs:element name="command" type="textListType" minOccurs="0"/>
+                    <xs:element name="rawOutput" type="textType" minOccurs="0"/>
+                    <xs:element name="rawOutputFormat" type="xs:string" minOccurs="0"/>
+                    <xs:element name="errors" type="textListType"/>
+                    <xs:element name="warnings" type="textListType"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="provenance">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="timestamp" type="xs:dateTime"/>
+              <xs:element name="serviceVersion" type="xs:string"/>
+              <xs:element name="toolVersions">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="toolVersion" minOccurs="0" maxOccurs="unbounded">
+                      <xs:complexType>
+                        <xs:simpleContent>
+                          <xs:extension base="xs:string">
+                            <xs:attribute name="tool" type="xs:string" use="required"/>
+                          </xs:extension>
+                        </xs:simpleContent>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="ffis" type="valueType" minOccurs="0"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="errors" type="textListType"/>
+        <xs:element name="warnings" type="textListType"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

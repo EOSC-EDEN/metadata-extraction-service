@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:eden:mes:result:1",
+  "title": "MES extraction result",
+  "description": "Response of POST /api/v1/extract/ (MES-REQ-2-005). The XML representation (mes-result.xsd) carries the same content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "filename", "tool_resolution", "results", "provenance", "errors", "warnings"],
+  "properties": {
+    "request_id": {"type": "string"},
+    "filename": {"type": "string"},
+    "tool_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["puid", "mime_type", "resolved_tools", "selection_method"],
+      "properties": {
+        "puid": {"type": ["string", "null"]},
+        "mime_type": {"type": ["string", "null"]},
+        "resolved_tools": {"type": "array", "items": {"type": "string"}},
+        "selection_method": {"type": "string"}
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tool", "version", "status", "started_at", "finished_at",
+          "command", "raw_output", "raw_output_format", "errors", "warnings"
+        ],
+        "properties": {
+          "tool": {"type": "string"},
+          "version": {"type": ["string", "null"]},
+          "status": {"enum": ["success", "failure", "timeout"]},
+          "started_at": {"type": ["string", "null"], "format": "date-time"},
+          "finished_at": {"type": ["string", "null"], "format": "date-time"},
+          "command": {"type": ["array", "null"], "items": {"type": "string"}},
+          "raw_output": {
+            "type": ["string", "null"],
+            "description": "Tool output exactly as produced (MES-REQ-3-004); never re-parsed."
+          },
+          "raw_output_format": {"type": ["string", "null"]},
+          "errors": {"type": "array", "items": {"type": "string"}},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "service_version", "tool_versions", "ffis"],
+      "properties": {
+        "timestamp": {"type": "string", "format": "date-time"},
+        "service_version": {"type": "string"},
+        "tool_versions": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "null"]}
+        },
+        "ffis": {
+          "description": "FFIS's own provenance block, passed through; null when FFIS was not used.",
+          "type": ["object", "null"]
+        }
+      }
+    },
+    "errors": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  }
+}
