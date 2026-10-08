@@ -103,3 +103,44 @@ class ExtractAutoSchema(AutoSchema):
             "500": error("Unexpected error while processing the request."),
             "503": error("No default extraction tool is configured."),
         }
+
+
+class ToolsAutoSchema(AutoSchema):
+    """Describes the read-only tool listing."""
+
+    def get_operation_id(self, path, method):
+        return "listTools"
+
+    def get_responses(self, path, method):
+        return {
+            "200": {
+                "description": "The tools configured for metadata extraction.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["tools"],
+                            "properties": {
+                                "tools": {"type": "array", "items": {"$ref": "#/components/schemas/Tool"}}
+                            },
+                        }
+                    }
+                },
+            }
+        }
+
+    def get_components(self, path, method):
+        return {
+            "Tool": {
+                "type": "object",
+                "required": ["name", "kind", "enabled", "mandatory", "default", "timeout_seconds"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["subprocess", "http"]},
+                    "enabled": {"type": "boolean"},
+                    "mandatory": {"type": "boolean", "description": "Failure surfaces a top-level error (MES-REQ-3-006)."},
+                    "default": {"type": "boolean", "description": "Whether this is the default tool (MES-REQ-1-001)."},
+                    "timeout_seconds": {"type": "integer"},
+                },
+            }
+        }

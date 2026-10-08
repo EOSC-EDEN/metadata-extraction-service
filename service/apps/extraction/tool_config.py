@@ -62,6 +62,11 @@ def get_tool_config(name: str) -> ToolConfig:
     return _build(name, entry)
 
 
+def list_tool_configs() -> list[ToolConfig]:
+    """All tools in `settings.MES_TOOLS`, enabled or not, in settings order."""
+    return [_build(name, entry) for name, entry in settings.MES_TOOLS.items()]
+
+
 def get_default_tool() -> ToolConfig:
     """The enabled default tool (MES-REQ-1-001), or raise ToolNotConfigured."""
     name = settings.MES_DEFAULT_TOOL

@@ -5,9 +5,12 @@ import uuid
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.openapi import ExtractAutoSchema
+from django.conf import settings
+
+from apps.api.openapi import ExtractAutoSchema, ToolsAutoSchema
 from apps.api.serializers import ExtractionRequestSerializer, serialize_extraction_result
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
+from apps.extraction.tool_config import list_tool_configs
 
 
 class ExtractMetadataView(APIView):
@@ -35,3 +38,27 @@ class ExtractMetadataView(APIView):
             )
 
         return Response(serialize_extraction_result(result, str(uuid.uuid4()), upload.name))
+
+
+class ToolsView(APIView):
+    """GET /api/v1/tools/ — the tools configured for metadata extraction.
+
+    Deliberately omits invocation commands, arguments and URLs so deployment
+    details are not exposed.
+    """
+
+    schema = ToolsAutoSchema()
+
+    def get(self, request):
+        tools = [
+            {
+                "name": tool.name,
+                "kind": tool.kind,
+                "enabled": tool.enabled,
+                "mandatory": tool.mandatory,
+                "default": tool.name == settings.MES_DEFAULT_TOOL,
+                "timeout_seconds": tool.timeout_seconds,
+            }
+            for tool in list_tool_configs()
+        ]
+        return Response({"tools": tools})

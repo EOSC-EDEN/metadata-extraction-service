@@ -5,7 +5,7 @@ from django.views.generic import TemplateView
 from rest_framework.schemas import get_schema_view
 
 from apps.api.openapi import SCHEMA_DIR
-from apps.api.views import ExtractMetadataView
+from apps.api.views import ExtractMetadataView, ToolsView
 
 app_name = "api"
 
@@ -20,6 +20,7 @@ def _schema_file(filename, content_type):
 
 urlpatterns = [
     path("extract/", ExtractMetadataView.as_view(), name="extract"),
+    path("tools/", ToolsView.as_view(), name="tools"),
     path(
         "schema/",
         get_schema_view(
@@ -27,7 +28,10 @@ urlpatterns = [
             description="Extract technical metadata from a single file (EOSC EDEN CPP-009).",
             version="0.1.0",
             url="/api/v1/",
-            patterns=[path("extract/", ExtractMetadataView.as_view())],
+            patterns=[
+                path("extract/", ExtractMetadataView.as_view()),
+                path("tools/", ToolsView.as_view()),
+            ],
         ),
         name="openapi-schema",
     ),
