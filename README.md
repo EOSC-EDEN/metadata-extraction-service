@@ -21,6 +21,18 @@ Planned tool integrations include ExifTool, MediaInfo, FFprobe, File Scraper, Im
 
 See [`docs/specification.md`](docs/specification.md) for the full specification, including normative requirements and non-normative guidance.
 
+## API documentation
+
+The service generates its OpenAPI 3 description with Django REST framework's built-in schema support. All endpoints are relative to the service root:
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/v1/extract/` | Extract metadata from a single uploaded file (multipart: `file`, optional `puid`, `mime_type`). JSON by default, XML with `Accept: application/xml`. |
+| `GET /api/v1/schema/` | OpenAPI 3 schema (YAML by default; send `Accept: application/vnd.oai.openapi+json` for JSON). |
+| `GET /api/v1/docs/` | Browsable Swagger UI (loads a pinned `swagger-ui-dist` from a CDN). |
+| `GET /api/v1/schema/result.json` | JSON Schema of the extraction result. |
+| `GET /api/v1/schema/result.xsd` | XSD of the XML extraction result. |
+
 ## Contributing
 
 Contributions are welcome via pull request. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch policy and pull request process, and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for expected standards of behaviour.

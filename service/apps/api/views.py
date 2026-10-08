@@ -5,12 +5,15 @@ import uuid
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.api.openapi import ExtractAutoSchema
 from apps.api.serializers import ExtractionRequestSerializer, serialize_extraction_result
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
 
 
 class ExtractMetadataView(APIView):
     """POST /api/v1/extract/ — extract metadata from a single uploaded file."""
+
+    schema = ExtractAutoSchema()
 
     def post(self, request):
         serializer = ExtractionRequestSerializer(data=request.data)
