@@ -133,3 +133,13 @@ MES_ADAPTER_CLASSES = {
 
 # Bound on concurrent tool invocations per extraction request.
 MES_MAX_CONCURRENT_TOOLS = 4
+
+# File Format Identification Service (FFIS, https://github.com/EOSC-EDEN/eosc-ffis).
+# Called only when a request supplies neither a PUID nor a MIME type.
+MES_FFIS_ENABLED = os.environ.get("MES_FFIS_ENABLED", "false").lower() in ("1", "true", "yes")
+MES_FFIS_BASE_URL = os.environ.get("MES_FFIS_BASE_URL", "")
+MES_FFIS_TIMEOUT_SECONDS = int(os.environ.get("MES_FFIS_TIMEOUT_SECONDS", "30"))
+# FFIS's OpenAPI schema doesn't enumerate Identifier.scheme values; confirm
+# these against a live FFIS response (compared case-insensitively).
+MES_FFIS_PUID_SCHEMES = ("pronom", "puid")
+MES_FFIS_MIME_SCHEMES = ("mime", "mimetype", "mime-type", "media-type")

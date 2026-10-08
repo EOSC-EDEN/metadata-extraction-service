@@ -1,11 +1,11 @@
 import subprocess
 from unittest import mock
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.extraction.adapters.base import ToolExecutionStatus
-from apps.extraction.exceptions import ToolNotConfigured
 from apps.extraction.models import ExtractionTool
+from apps.extraction.services.format_identification import FFISResolution
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
 
 
@@ -23,35 +23,42 @@ def _unsaved_tool(name, is_mandatory=False):
     )
 
 
-class ResolveToolsStubTests(TestCase):
-    """Covers the stubbed "always default tool" resolver."""
-
-    def test_resolves_to_the_seeded_default_tool(self):
-        tools, selection_method = ExtractionOrchestrator()._resolve_tools(
-            puid=None, mime_type=None
-        )
-
-        self.assertEqual([tool.name for tool in tools], ["exiftool"])
-        self.assertEqual(selection_method, "default_tool")
-
-    def test_raises_when_no_default_tool_is_configured(self):
-        ExtractionTool.objects.update(is_default=False)
-
-        with self.assertRaises(ToolNotConfigured):
-            ExtractionOrchestrator()._resolve_tools(puid=None, mime_type=None)
-
+class ExtractEndToEndTests(TestCase):
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
-    def test_extract_end_to_end_uses_the_seeded_default_tool(self, mock_run):
+    def test_extract_uses_the_seeded_default_tool(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="[{}]", stderr=""
         )
 
         result = ExtractionOrchestrator().extract("/tmp/file.jpg")
 
-        self.assertEqual(result.selection_method, "default_tool")
+        self.assertEqual(result.selection_method, "default_tool_ffis_disabled")
         self.assertEqual(result.resolved_tools, ("exiftool",))
         self.assertEqual(result.results[0].status, ToolExecutionStatus.SUCCESS)
         self.assertEqual(result.errors, [])
+
+    @override_settings(MES_FFIS_ENABLED=True)
+    @mock.patch("apps.extraction.adapters.base.subprocess.run")
+    def test_extract_records_ffis_identification_and_warnings(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="[{}]", stderr=""
+        )
+        ffis = mock.Mock()
+        ffis.identify.return_value = FFISResolution(
+            puid="fmt/43",
+            mime_type="image/jpeg",
+            outcome="warning",
+            engine_warnings=["engines disagree"],
+            provenance={"outcome": "warning", "tools": []},
+        )
+
+        result = ExtractionOrchestrator(ffis_client=ffis).extract("/tmp/file.jpg")
+
+        self.assertEqual(result.selection_method, "default_tool_ffis_identified")
+        self.assertEqual((result.puid, result.mime_type), ("fmt/43", "image/jpeg"))
+        self.assertEqual(result.warnings, ["engines disagree"])
+        self.assertEqual(result.ffis_provenance["outcome"], "warning")
+        self.assertEqual(result.resolved_tools, ("exiftool",))
 
 
 class RunAggregationTests(SimpleTestCase):
