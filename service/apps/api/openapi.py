@@ -21,7 +21,7 @@ _ERRORS_SCHEMA = {
 
 
 def _to_openapi(node):
-    """Rewrite JSON Schema draft-07 idioms that OpenAPI 3.0 does not accept."""
+    """Rewrite JSON Schema 2020-12 idioms that OpenAPI 3.0 does not accept."""
     if isinstance(node, list):
         return [_to_openapi(item) for item in node]
     if not isinstance(node, dict):

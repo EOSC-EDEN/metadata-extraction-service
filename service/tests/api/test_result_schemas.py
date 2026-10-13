@@ -5,7 +5,7 @@ from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
-from jsonschema import Draft7Validator, FormatChecker
+from jsonschema import Draft202012Validator, FormatChecker
 from lxml import etree
 from rest_framework.test import APIClient
 
@@ -19,8 +19,8 @@ def _json_validator():
     import json
 
     schema = json.loads((SCHEMA_DIR / "mes-result.schema.json").read_text())
-    Draft7Validator.check_schema(schema)
-    return Draft7Validator(schema, format_checker=FormatChecker())
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
 def _xsd():

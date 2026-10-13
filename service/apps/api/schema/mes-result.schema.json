@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:eden:mes:result:1",
   "title": "MES extraction result",
   "description": "Response of POST /api/v1/extract/ (MES-REQ-2-005). The XML representation (mes-result.xsd) carries the same content.",
