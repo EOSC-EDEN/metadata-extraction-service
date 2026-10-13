@@ -34,6 +34,30 @@ The service generates its OpenAPI 3 description with Django REST framework's bui
 | `GET /api/v1/schema/result.json` | JSON Schema of the extraction result. |
 | `GET /api/v1/schema/result.xsd` | XSD of the XML extraction result. |
 
+## Metrics
+
+`GET /metrics` exposes Prometheus metrics (scrape it from Prometheus and chart it in Grafana):
+
+| Metric | Type | Labels |
+|---|---|---|
+| `mes_extract_requests_total` | Counter | `status`: `success`, `partial`, `failed`, `rejected`, `error` |
+| `mes_extract_request_duration_seconds` | Histogram | |
+| `mes_uploaded_file_bytes` | Histogram | |
+| `mes_uploaded_bytes_total` | Counter | |
+| `mes_tool_runs_total` | Counter | `tool`, `status` |
+| `mes_tool_duration_seconds` | Histogram | `tool` |
+
+Accumulated GB uploaded: `increase(mes_uploaded_bytes_total[1d]) / 1e9`. In the container, gunicorn workers
+share metrics through `PROMETHEUS_MULTIPROC_DIR`. The endpoint is unauthenticated: make it reachable only by
+your Prometheus scraper, not through a public gateway.
+
+```yaml
+scrape_configs:
+  - job_name: mes
+    static_configs:
+      - targets: ["mes:8000"]
+```
+
 ## Adding extraction tools
 
 See [`docs/adding-a-tool.md`](docs/adding-a-tool.md) for a step-by-step guide to configuring a new extraction tool.

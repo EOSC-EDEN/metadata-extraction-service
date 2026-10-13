@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.extraction",
     "apps.api",
     "apps.ui",
+    "apps.metrics",
 ]
 
 MIDDLEWARE = [

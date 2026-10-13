@@ -2,7 +2,8 @@ FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DJANGO_SETTINGS_MODULE=web.settings.prod
+    DJANGO_SETTINGS_MODULE=web.settings.prod \
+    PROMETHEUS_MULTIPROC_DIR=/tmp/mes-metrics
 
 # Extraction tools are optional build args: enable with --build-arg INSTALL_<TOOL>=true,
 # disable with =false. ExifTool and MediaInfo are on by default; the rest are opt-in.
@@ -24,7 +25,8 @@ RUN set -eu; \
         rm -rf /var/lib/apt/lists/*; \
     fi
 
-RUN useradd --system --create-home --uid 10001 mes
+RUN useradd --system --create-home --uid 10001 mes \
+    && mkdir -p /tmp/mes-metrics && chown mes:mes /tmp/mes-metrics
 
 WORKDIR /app
 COPY requirements.txt .
@@ -38,4 +40,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/', timeout=4).status == 200 else 1)"
 
-CMD ["gunicorn", "web.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+CMD ["gunicorn", "web.wsgi:application", "-c", "gunicorn.conf.py"]
