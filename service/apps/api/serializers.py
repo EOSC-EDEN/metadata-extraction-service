@@ -7,12 +7,30 @@ Tool `raw_output` is passed through as an unmodified string (MES-REQ-3-004).
 
 from datetime import datetime, timezone
 
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers
+from rest_framework.exceptions import APIException
 
 from apps.extraction.adapters.base import ToolInvocationResult
 from apps.extraction.services.orchestrator import AggregatedExtractionResult
 
 SERVICE_VERSION = "0.1.0"
+
+
+class PayloadTooLarge(APIException):
+    status_code = 413
+    default_detail = "The uploaded file is too large."
+    default_code = "payload_too_large"
+
+
+def validate_upload_limit_config() -> None:
+    """`MES_MAX_UPLOAD_BYTES` must be a positive integer; checked at startup."""
+    value = getattr(settings, "MES_MAX_UPLOAD_BYTES", None)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ImproperlyConfigured(
+            f"settings.MES_MAX_UPLOAD_BYTES must be an integer >= 1, got {value!r}."
+        )
 
 
 class ExtractionRequestSerializer(serializers.Serializer):
@@ -23,6 +41,11 @@ class ExtractionRequestSerializer(serializers.Serializer):
     def validate_file(self, value):
         if value.size == 0:
             raise serializers.ValidationError("The uploaded file is empty.")
+        limit = settings.MES_MAX_UPLOAD_BYTES
+        if value.size > limit:
+            raise PayloadTooLarge(
+                f"The uploaded file is {value.size} bytes, which exceeds the maximum of {limit} bytes."
+            )
         return value
 
 

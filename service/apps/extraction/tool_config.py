@@ -88,3 +88,12 @@ def get_default_tool() -> ToolConfig:
 def validate_tool_config() -> None:
     for name, entry in settings.MES_TOOLS.items():
         _build(name, entry)
+
+
+def validate_concurrency_config() -> None:
+    """`MES_MAX_CONCURRENT_TOOLS` must be a positive integer (a pool of 0 workers would crash requests)."""
+    value = getattr(settings, "MES_MAX_CONCURRENT_TOOLS", None)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ImproperlyConfigured(
+            f"settings.MES_MAX_CONCURRENT_TOOLS must be an integer >= 1, got {value!r}."
+        )

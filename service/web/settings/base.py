@@ -139,6 +139,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 #   enabled             disabled tools are never selected
 #   mandatory           failure surfaces a top-level error (MES-REQ-3-006)
 
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.environ.get(name, default).lower() in ("1", "true", "yes")
+
+
 MES_TOOLS = {
     "exiftool": {
         "adapter": "apps.extraction.adapters.exiftool.ExifToolAdapter",
@@ -158,13 +162,54 @@ MES_TOOLS = {
         "enabled": True,
         "mandatory": False,
     },
+    # Opt-in tools: disabled unless MES_<TOOL>_ENABLED is set, since they are not
+    # installed in the default image (see the Dockerfile INSTALL_* build args).
+    "ffprobe": {
+        "adapter": "apps.extraction.adapters.ffprobe.FFprobeAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_FFPROBE_COMMAND", "ffprobe"),
+        "extra_args": [],
+        "timeout_seconds": 30,
+        "enabled": _env_flag("MES_FFPROBE_ENABLED"),
+        "mandatory": False,
+    },
+    "imagemagick": {
+        "adapter": "apps.extraction.adapters.imagemagick.ImageMagickAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_IMAGEMAGICK_COMMAND", "identify"),
+        "extra_args": [],
+        "timeout_seconds": 30,
+        "enabled": _env_flag("MES_IMAGEMAGICK_ENABLED"),
+        "mandatory": False,
+    },
+    "tika": {
+        "adapter": "apps.extraction.adapters.tika.TikaAdapter",
+        "kind": "http",
+        # Base URL of a running Tika server (https://tika.apache.org/).
+        "invocation_command": os.environ.get("MES_TIKA_URL", "http://localhost:9998"),
+        "timeout_seconds": 60,
+        "enabled": _env_flag("MES_TIKA_ENABLED"),
+        "mandatory": False,
+    },
 }
 
 # Tool run when no format mapping selects one (MES-REQ-1-001).
 MES_DEFAULT_TOOL = os.environ.get("MES_DEFAULT_TOOL", "exiftool")
 
-# Bound on concurrent tool invocations per extraction request.
-MES_MAX_CONCURRENT_TOOLS = 4
+# Bound on concurrent tool invocations within ONE extraction request (a positive
+# integer, validated at startup). Worst-case simultaneous tool processes are
+# gunicorn workers x this value, so size it against the container's CPU/memory,
+# not against the number of configured tools.
+MES_MAX_CONCURRENT_TOOLS = int(os.environ.get("MES_MAX_CONCURRENT_TOOLS", "4"))
+
+# Largest accepted upload, in bytes (a positive integer, validated at startup).
+# Larger files are rejected with HTTP 413 before any tool runs.
+MES_MAX_UPLOAD_BYTES = int(os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024 * 1024)))
+
+# Uploads above this size are spooled to disk instead of held in memory, and
+# non-file form fields are capped well below the file limit.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 
 # File Format Identification Service (FFIS, https://github.com/EOSC-EDEN/eosc-ffis).
 # Called only when a request supplies neither a PUID nor a MIME type.

@@ -2,7 +2,12 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
 
 from apps.extraction.exceptions import ToolNotConfigured
-from apps.extraction.tool_config import get_default_tool, get_tool_config, validate_tool_config
+from apps.extraction.tool_config import (
+    get_default_tool,
+    get_tool_config,
+    validate_concurrency_config,
+    validate_tool_config,
+)
 
 _TOOL = {
     "adapter": "apps.extraction.adapters.exiftool.ExifToolAdapter",
@@ -52,3 +57,16 @@ class ToolConfigTests(SimpleTestCase):
     def test_http_tool_requires_invocation_command(self):
         with self.assertRaises(ImproperlyConfigured):
             validate_tool_config()
+
+
+class ConcurrencyConfigTests(SimpleTestCase):
+    def test_accepts_boundary_and_typical_values(self):
+        for value in (1, 4):
+            with self.subTest(value=value), override_settings(MES_MAX_CONCURRENT_TOOLS=value):
+                validate_concurrency_config()
+
+    def test_rejects_zero_negative_and_non_integers(self):
+        for value in (0, -1, "4", 2.5, None, True):
+            with self.subTest(value=value), override_settings(MES_MAX_CONCURRENT_TOOLS=value):
+                with self.assertRaises(ImproperlyConfigured):
+                    validate_concurrency_config()

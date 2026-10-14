@@ -50,6 +50,30 @@ class ExtractViewTests(TestCase):
         response = self.client.post(self.url, {"file": _upload(b"")}, format="multipart")
         self.assertEqual(response.status_code, 400)
 
+    @override_settings(MES_MAX_UPLOAD_BYTES=10)
+    @mock.patch("apps.extraction.adapters.base.subprocess.run")
+    def test_upload_of_exactly_the_limit_is_accepted(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        response = self.client.post(self.url, {"file": _upload(b"x" * 10)}, format="multipart")
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(MES_MAX_UPLOAD_BYTES=10)
+    @mock.patch("apps.extraction.services.orchestrator.ExtractionOrchestrator.extract")
+    def test_upload_one_byte_over_the_limit_is_413_and_runs_no_tool(self, mock_extract):
+        response = self.client.post(self.url, {"file": _upload(b"x" * 11)}, format="multipart")
+        self.assertEqual(response.status_code, 413)
+        body = response.json()
+        self.assertIn("exceeds the maximum of 10 bytes", body["errors"][0])
+        self.assertTrue(body["request_id"])
+        mock_extract.assert_not_called()
+
+    @override_settings(MES_MAX_UPLOAD_BYTES=10)
+    @mock.patch("apps.extraction.adapters.base.subprocess.run")
+    def test_one_byte_upload_is_accepted(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        response = self.client.post(self.url, {"file": _upload(b"x")}, format="multipart")
+        self.assertEqual(response.status_code, 200)
+
     @override_settings(MES_DEFAULT_TOOL="")
     def test_no_default_tool_is_503(self):
         response = self.client.post(self.url, {"file": _upload()}, format="multipart")

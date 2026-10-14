@@ -18,4 +18,17 @@ services:
       # Point at a running FFIS instance (e.g. http://host.docker.internal:8001).
       MES_FFIS_BASE_URL: ${MES_FFIS_BASE_URL:-}
       MES_FFIS_TIMEOUT_SECONDS: ${MES_FFIS_TIMEOUT_SECONDS:-30}
+      MES_MAX_UPLOAD_BYTES: ${MES_MAX_UPLOAD_BYTES:-536870912}
+      MES_MAX_CONCURRENT_TOOLS: ${MES_MAX_CONCURRENT_TOOLS:-4}
+      # Opt-in tools (set to true once the tool is installed / reachable).
+      MES_FFPROBE_ENABLED: ${MES_FFPROBE_ENABLED:-false}
+      MES_IMAGEMAGICK_ENABLED: ${MES_IMAGEMAGICK_ENABLED:-false}
+      MES_TIKA_ENABLED: ${MES_TIKA_ENABLED:-false}
+      MES_TIKA_URL: ${MES_TIKA_URL:-http://tika:9998}
+    restart: unless-stopped
+
+  # Optional Apache Tika server: `docker compose --profile tika up`, with MES_TIKA_ENABLED=true.
+  tika:
+    profiles: ["tika"]
+    image: apache/tika:3.0.0.0-full
     restart: unless-stopped

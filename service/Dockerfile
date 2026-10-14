@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Extraction tools are optional build args: enable with --build-arg INSTALL_<TOOL>=true,
 # disable with =false. ExifTool and MediaInfo are on by default; the rest are opt-in.
-# (Apache Tika and File Scraper adapters don't exist yet; they are added in a later step.)
+# Apache Tika runs as a separate container (see docker-compose.yml, profile "tika").
+# Enable each opt-in tool with MES_<TOOL>_ENABLED=true.
 ARG INSTALL_EXIFTOOL=true
 ARG INSTALL_MEDIAINFO=true
 ARG INSTALL_FFPROBE=false

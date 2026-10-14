@@ -10,7 +10,11 @@ from rest_framework.views import APIView
 from django.conf import settings
 
 from apps.api.openapi import ExtractAutoSchema, ToolsAutoSchema
-from apps.api.serializers import ExtractionRequestSerializer, serialize_extraction_result
+from apps.api.serializers import (
+    ExtractionRequestSerializer,
+    PayloadTooLarge,
+    serialize_extraction_result,
+)
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
 from apps.extraction.tool_config import list_tool_configs
 from apps.metrics import metrics
@@ -33,7 +37,7 @@ class ExtractMetadataView(APIView):
             serializer = ExtractionRequestSerializer(data=request.data)
             try:
                 serializer.is_valid(raise_exception=True)
-            except ValidationError:
+            except (ValidationError, PayloadTooLarge):
                 outcome = "rejected"
                 raise
             data = serializer.validated_data

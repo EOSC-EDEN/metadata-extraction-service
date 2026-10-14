@@ -25,7 +25,7 @@ class OpenAPITests(TestCase):
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
         self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type"})
         self.assertEqual(form["required"], ["file"])
-        self.assertEqual(set(operation["responses"]), {"200", "400", "500", "503"})
+        self.assertEqual(set(operation["responses"]), {"200", "400", "413", "500", "503"})
         ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
         self.assertIn("tool_resolution", ok["properties"])
 

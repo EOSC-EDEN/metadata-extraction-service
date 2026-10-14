@@ -17,7 +17,7 @@ No single extraction tool can capture all relevant internal metadata for the div
 - Returning results through a standardised REST API, in both XML and JSON, for a single file or a full Submission/Archival Information Package (per the [SIP2AIP Factory specification](https://github.com/EOSC-EDEN/wp2-oais-packaging-information)).
 - Supporting extensibility, so new extraction tools can be added behind adapters without changing the core wrapper logic.
 
-Planned tool integrations include ExifTool, MediaInfo, FFprobe, File Scraper, ImageMagick, and Apache Tika.
+Supported tool integrations are ExifTool, MediaInfo, FFprobe, ImageMagick, and Apache Tika. File Scraper is planned.
 
 See [`docs/specification.md`](docs/specification.md) for the full specification, including normative requirements and non-normative guidance.
 
@@ -57,6 +57,14 @@ scrape_configs:
     static_configs:
       - targets: ["mes:8000"]
 ```
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `MES_MAX_UPLOAD_BYTES` | `536870912` (512 MiB) | Largest accepted upload. Larger files get HTTP `413` and no tool runs. |
+| `MES_MAX_CONCURRENT_TOOLS` | `4` | Tools run concurrently within one request (integer ≥ 1; invalid values stop startup). Worst case in total is gunicorn workers × this value, so size it to the container's CPU/memory. |
+| `MES_FFPROBE_ENABLED`, `MES_IMAGEMAGICK_ENABLED`, `MES_TIKA_ENABLED` | `false` | ExifTool and MediaInfo are enabled by default; the other tools are opt-in. Binary paths: `MES_FFPROBE_COMMAND`, `MES_IMAGEMAGICK_COMMAND`; Tika server URL: `MES_TIKA_URL`. |
 
 ## Adding extraction tools
 

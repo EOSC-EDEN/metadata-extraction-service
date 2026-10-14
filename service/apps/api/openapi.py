@@ -103,6 +103,7 @@ class ExtractAutoSchema(AutoSchema):
                 "content": _json_and_xml(load_result_schema()),
             },
             "400": error("Malformed request, e.g. missing or empty `file`."),
+            "413": error("The uploaded file exceeds the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
             "500": error("Unexpected error while processing the request."),
             "503": error("No default extraction tool is configured."),
         }
