@@ -16,7 +16,10 @@ SCHEMA_DIR = Path(__file__).resolve().parent / "schema"
 _ERRORS_SCHEMA = {
     "type": "object",
     "required": ["errors"],
-    "properties": {"errors": {"type": "array", "items": {"type": "string"}}},
+    "properties": {
+        "errors": {"type": "array", "items": {"type": "string"}},
+        "request_id": {"type": "string", "description": "Matches the id in the service logs."},
+    },
 }
 
 

@@ -42,7 +42,9 @@ class ExtractViewTests(TestCase):
     def test_missing_file_is_400(self):
         response = self.client.post(self.url, {}, format="multipart")
         self.assertEqual(response.status_code, 400)
-        self.assertIn("file", response.json())
+        body = response.json()
+        self.assertTrue(any(e.startswith("file:") for e in body["errors"]))
+        self.assertTrue(body["request_id"])
 
     def test_empty_file_is_400(self):
         response = self.client.post(self.url, {"file": _upload(b"")}, format="multipart")

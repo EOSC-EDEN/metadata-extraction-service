@@ -176,6 +176,21 @@ MES_FFIS_TIMEOUT_SECONDS = int(os.environ.get("MES_FFIS_TIMEOUT_SECONDS", "30"))
 MES_FFIS_PUID_SCHEMES = ("pronom", "puid")
 MES_FFIS_MIME_SCHEMES = ("mime", "mimetype", "mime-type", "media-type")
 
+# Errors and warnings gathered during extraction are logged with the request's
+# request_id (MES-REQ-5-001) as well as returned to the caller.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "mes": {
+            "format": "%(asctime)s %(levelname)s %(name)s request_id=%(request_id)s %(message)s",
+            "defaults": {"request_id": "-"},
+        },
+    },
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "mes"}},
+    "loggers": {"apps": {"handlers": ["console"], "level": "INFO", "propagate": False}},
+}
+
 REST_FRAMEWORK = {
     # JSON is first, so it is the default when no Accept header is sent.
     "DEFAULT_RENDERER_CLASSES": [

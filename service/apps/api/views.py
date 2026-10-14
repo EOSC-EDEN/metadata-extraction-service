@@ -21,6 +21,11 @@ class ExtractMetadataView(APIView):
 
     schema = ExtractAutoSchema()
 
+    def initial(self, request, *args, **kwargs):
+        # Assigned up front so error responses and logs share the success path's id.
+        request.mes_request_id = str(uuid.uuid4())
+        super().initial(request, *args, **kwargs)
+
     def post(self, request):
         started = time.perf_counter()
         outcome = "error"
@@ -46,11 +51,14 @@ class ExtractMetadataView(APIView):
                     path,
                     puid=data.get("puid") or None,
                     mime_type=data.get("mime_type") or None,
+                    request_id=request.mes_request_id,
                 )
 
             metrics.record_tool_results(result.results)
             outcome = metrics.classify_outcome(result)
-            return Response(serialize_extraction_result(result, str(uuid.uuid4()), upload.name))
+            return Response(
+                serialize_extraction_result(result, request.mes_request_id, upload.name)
+            )
         finally:
             metrics.record_request(outcome, time.perf_counter() - started)
 

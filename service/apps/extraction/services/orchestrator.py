@@ -8,6 +8,7 @@ Tool selection lives in `services/tool_resolution.py` (FFIS identification,
 then the default tool).
 """
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from apps.extraction.adapters.base import HTTPToolAdapter, ToolExecutionStatus, 
 from apps.extraction.adapters.registry import get_adapter_class
 from apps.extraction.services.tool_resolution import ToolResolution, resolve_tools
 from apps.extraction.tool_config import ToolConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,9 +41,13 @@ class ExtractionOrchestrator:
     def __init__(self, ffis_client=None):
         self.ffis_client = ffis_client
 
-    def extract(self, file_path, puid=None, mime_type=None) -> AggregatedExtractionResult:
+    def extract(
+        self, file_path, puid=None, mime_type=None, request_id=None
+    ) -> AggregatedExtractionResult:
         resolution = resolve_tools(file_path, puid, mime_type, ffis_client=self.ffis_client)
-        return self._run(resolution.tools, resolution.selection_method, file_path, resolution)
+        result = self._run(resolution.tools, resolution.selection_method, file_path, resolution)
+        _log_outcome(result, request_id)
+        return result
 
     def _run(
         self, tools, selection_method, file_path, resolution: ToolResolution | None = None
@@ -98,7 +105,7 @@ class ExtractionOrchestrator:
             started_at=now,
             finished_at=now,
             command=None,
-            errors=[str(exc)],
+            errors=[f"{type(exc).__name__}: {exc}"],
             warnings=[],
         )
 
@@ -124,6 +131,29 @@ class ExtractionOrchestrator:
             if result is None or result.status != ToolExecutionStatus.SUCCESS:
                 warnings.append(_describe_incomplete(tool.name, result, "Tool"))
         return warnings
+
+
+def _log_outcome(result: AggregatedExtractionResult, request_id) -> None:
+    """Log every error and warning gathered during extraction, keyed by request_id (MES-REQ-5-001)."""
+    for tool_result in result.results:
+        extra = {"request_id": request_id, "tool": tool_result.tool_name}
+        for message in tool_result.errors:
+            logger.error("tool error: %s", message, extra=extra)
+        for message in tool_result.warnings:
+            logger.warning("tool warning: %s", message, extra=extra)
+    extra = {"request_id": request_id}
+    for message in result.errors:
+        logger.error("extraction error: %s", message, extra=extra)
+    for message in result.warnings:
+        logger.warning("extraction warning: %s", message, extra=extra)
+    logger.info(
+        "extraction finished: method=%s tools=%s errors=%d warnings=%d",
+        result.selection_method,
+        ",".join(result.resolved_tools),
+        len(result.errors),
+        len(result.warnings),
+        extra=extra,
+    )
 
 
 def _describe_incomplete(name, result, label) -> str:

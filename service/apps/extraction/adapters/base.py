@@ -77,6 +77,9 @@ class BaseToolAdapter(ABC):
         except self.failure_exceptions as exc:
             status = ToolExecutionStatus.FAILURE
             errors = [_describe_failure(exc)]
+        except Exception as exc:  # run() never raises, whatever invoke() throws
+            status = ToolExecutionStatus.FAILURE
+            errors = [f"{type(exc).__name__}: {exc}"]
         finished_at = datetime.now(timezone.utc)
         return ToolInvocationResult(
             tool_name=self.tool_name,
