@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from django.conf import settings
 
-from apps.api.openapi import ExtractAutoSchema, ToolsAutoSchema
+from apps.api.openapi import ExtractAutoSchema, LimitsAutoSchema, ToolsAutoSchema
 from apps.api.serializers import (
     ExtractionRequestSerializer,
     PayloadTooLarge,
@@ -89,3 +89,12 @@ class ToolsView(APIView):
             for tool in list_tool_configs()
         ]
         return Response({"tools": tools})
+
+
+class LimitsView(APIView):
+    """GET /api/v1/limits/ — deployment limits, read by the UI."""
+
+    schema = LimitsAutoSchema()
+
+    def get(self, request):
+        return Response({"max_upload_bytes": settings.MES_MAX_UPLOAD_BYTES})

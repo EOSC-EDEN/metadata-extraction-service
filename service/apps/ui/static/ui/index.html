@@ -142,6 +142,15 @@
     .id-section-title code { font-size: .82rem; background: #f0f3ff; border-radius: 4px; padding: .1rem .4rem; }
     .id-chip a { color: inherit; text-decoration: underline dotted; }
 
+    /* Service info panel (MES addition) */
+    #info-panel { margin-bottom: 1rem; }
+    #info-panel summary { cursor: pointer; font-weight: 600; font-size: .9rem; color: #4f6ef7; }
+    #info-panel .info-row { margin-top: .75rem; font-size: .88rem; color: #444; }
+    #info-panel .info-row b { color: #1a1a2e; }
+    #info-panel .id-grid { margin-top: .5rem; }
+    #info-panel .id-chip.disabled { opacity: .55; }
+    #info-panel .badge { margin-left: .25rem; }
+
     /* File meta */
     .meta-row {
       display: flex;
@@ -300,6 +309,16 @@
 
 <main>
 
+  <details id="info-panel" class="card" style="display:none">
+    <summary class="card-header">ℹ️ Service info</summary>
+    <div class="card-body">
+      <div class="info-row" id="limit-text"></div>
+      <div class="info-row"><b>Extraction tools</b>
+        <div class="id-grid" id="tool-chips"></div>
+      </div>
+    </div>
+  </details>
+
   <div id="options">
     <label>PUID (optional)
       <input type="text" id="puid-input" placeholder="e.g. fmt/43" autocomplete="off" />
@@ -384,6 +403,41 @@
   const optionsDiv = document.getElementById('options');
   const puidInput  = document.getElementById('puid-input');
   const mimeInput  = document.getElementById('mime-input');
+  const infoPanel  = document.getElementById('info-panel');
+
+  // ── Service info panel: limits and tools ────────────────────
+  // Purely informational: any failure leaves the panel hidden and uploads work.
+  let maxUploadBytes = null;
+  let infoReady = false;
+
+  async function loadServiceInfo() {
+    try {
+      const [limitsResp, toolsResp] = await Promise.all([
+        fetch('/api/v1/limits/'), fetch('/api/v1/tools/'),
+      ]);
+      if (!limitsResp.ok || !toolsResp.ok) return;
+      const limits = await limitsResp.json();
+      const tools = (await toolsResp.json()).tools || [];
+
+      maxUploadBytes = Number.isInteger(limits.max_upload_bytes) ? limits.max_upload_bytes : null;
+      document.getElementById('limit-text').innerHTML =
+        `<b>Max file size</b> ${maxUploadBytes === null ? 'unknown' : esc(fmt_bytes(maxUploadBytes))}`;
+
+      document.getElementById('tool-chips').innerHTML = tools.map(t => {
+        const badges = [
+          t.default ? '<span class="badge badge-success">default</span>' : '',
+          t.mandatory ? '<span class="badge badge-warning">mandatory</span>' : '',
+        ].join('');
+        return `<div class="id-chip${t.enabled ? '' : ' disabled'}">` +
+          `<div class="scheme">${esc(t.name)}</div>` +
+          `<div class="value">${t.enabled ? 'enabled' : 'disabled'}${badges}</div></div>`;
+      }).join('');
+
+      infoReady = true;
+      infoPanel.style.display = '';
+    } catch (_) { /* leave the panel hidden */ }
+  }
+  loadServiceInfo();
 
   // ── Human-readable explanation of how the tool(s) were selected ────────────
   const SELECTION_DESC = {
@@ -425,6 +479,7 @@
   function reset() {
     fileInput.value = '';
     optionsDiv.style.display = '';
+    if (infoReady) infoPanel.style.display = '';
     dropZone.style.display = '';
     spinner.style.display = 'none';
     resultDiv.style.display = 'none';
@@ -445,6 +500,14 @@
 
   async function extractFile(file) {
     optionsDiv.style.display = 'none';
+    infoPanel.style.display = 'none';
+    if (maxUploadBytes !== null && file.size > maxUploadBytes) {
+      dropZone.style.display = 'none';
+      errorDiv.textContent = `✗ File is ${fmt_bytes(file.size)}; the maximum is ${fmt_bytes(maxUploadBytes)}.`;
+      errorDiv.style.display = 'block';
+      tryAgain.style.display = 'block';
+      return;
+    }
     dropZone.style.display = 'none';
     spinner.style.display = 'block';
     resultDiv.style.display = 'none';

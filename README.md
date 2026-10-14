@@ -28,6 +28,7 @@ The service generates its OpenAPI 3 description with Django REST framework's bui
 | Endpoint | Description |
 |---|---|
 | `POST /api/v1/extract/` | Extract metadata from a single uploaded file (multipart: `file`, optional `puid`, `mime_type`). JSON by default, XML with `Accept: application/xml`. |
+| `GET /api/v1/limits/` | Deployment limits for the UI: `max_upload_bytes`. |
 | `GET /api/v1/tools/` | List the tools configured for metadata extraction (name, kind, enabled, mandatory, default, timeout). Invocation details are not exposed. |
 | `GET /api/v1/schema/` | OpenAPI 3 schema (YAML by default; send `Accept: application/vnd.oai.openapi+json` for JSON). |
 | `GET /api/v1/docs/` | Browsable Swagger UI (loads a pinned `swagger-ui-dist` from a CDN). |

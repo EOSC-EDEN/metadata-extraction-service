@@ -109,6 +109,34 @@ class ExtractAutoSchema(AutoSchema):
         }
 
 
+class LimitsAutoSchema(AutoSchema):
+    """Describes the read-only deployment limits."""
+
+    def get_operation_id(self, path, method):
+        return "getLimits"
+
+    def get_responses(self, path, method):
+        return {
+            "200": {
+                "description": "Deployment limits.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["max_upload_bytes"],
+                            "properties": {
+                                "max_upload_bytes": {
+                                    "type": "integer",
+                                    "description": "Largest accepted upload; larger files get HTTP 413.",
+                                },
+                            },
+                        }
+                    }
+                },
+            }
+        }
+
+
 class ToolsAutoSchema(AutoSchema):
     """Describes the read-only tool listing."""
 

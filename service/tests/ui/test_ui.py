@@ -27,6 +27,13 @@ class UiTests(SimpleTestCase):
         self.assertIn('id="puid-input"', html)
         self.assertIn('id="mime-input"', html)
 
+    def test_page_has_service_info_panel(self):
+        html = b"".join(self.client.get("/").streaming_content).decode()
+        for element_id in ("info-panel", "limit-text", "tool-chips"):
+            self.assertIn(f'id="{element_id}"', html, element_id)
+        self.assertIn("/api/v1/limits/", html)
+        self.assertIn("/api/v1/tools/", html)
+
     def test_logo_is_served_as_svg(self):
         response = self.client.get("/logo-eden.svg")
         self.assertEqual(response.status_code, 200)

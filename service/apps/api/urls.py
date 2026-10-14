@@ -5,7 +5,7 @@ from django.views.generic import TemplateView
 from rest_framework.schemas import get_schema_view
 
 from apps.api.openapi import SCHEMA_DIR
-from apps.api.views import ExtractMetadataView, ToolsView
+from apps.api.views import ExtractMetadataView, LimitsView, ToolsView
 
 app_name = "api"
 
@@ -21,6 +21,7 @@ def _schema_file(filename, content_type):
 urlpatterns = [
     path("extract/", ExtractMetadataView.as_view(), name="extract"),
     path("tools/", ToolsView.as_view(), name="tools"),
+    path("limits/", LimitsView.as_view(), name="limits"),
     path(
         "schema/",
         get_schema_view(
@@ -31,6 +32,7 @@ urlpatterns = [
             patterns=[
                 path("extract/", ExtractMetadataView.as_view()),
                 path("tools/", ToolsView.as_view()),
+                path("limits/", LimitsView.as_view()),
             ],
         ),
         name="openapi-schema",

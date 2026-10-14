@@ -20,6 +20,11 @@ class OpenAPITests(TestCase):
         self.assertTrue(schema["openapi"].startswith("3."))
         self.assertIn("/api/v1/extract/", schema["paths"])
 
+    def test_limits_endpoint_is_listed(self):
+        operation = self._schema()["paths"]["/api/v1/limits/"]["get"]
+        ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(ok["required"]), {"max_upload_bytes"})
+
     def test_extract_operation_describes_request_and_responses(self):
         operation = self._schema()["paths"]["/api/v1/extract/"]["post"]
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
