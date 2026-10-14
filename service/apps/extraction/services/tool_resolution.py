@@ -1,10 +1,10 @@
 """Decide which extraction tools run for a request.
 
-Until the FormatLibraryClient lands, every request runs only the
-configured default tool. When the caller supplies no PUID/MIME and FFIS is
+Until the FormatLibraryClient lands, every request runs all enabled
+tools (the default tool first). When the caller supplies no PUID/MIME and FFIS is
 enabled, FFIS identifies the file and the result is recorded for the
 response and provenance. The Format Library hand-off replaces the "always
-default tool" part.
+all enabled tools" part.
 """
 
 from dataclasses import dataclass, field
@@ -13,7 +13,7 @@ from django.conf import settings
 
 from apps.extraction.exceptions import FFISUnavailable
 from apps.extraction.services.format_identification import FFISClient
-from apps.extraction.tool_config import ToolConfig, get_default_tool
+from apps.extraction.tool_config import ToolConfig, get_default_tool, list_tool_configs
 
 
 @dataclass(frozen=True)
@@ -31,10 +31,12 @@ class ToolResolution:
 def resolve_tools(file_path, puid=None, mime_type=None, ffis_client=None) -> ToolResolution:
     default_tool = get_default_tool()  # raises ToolNotConfigured (MES-REQ-1-001)
 
+    tools = [default_tool] + [
+        t for t in list_tool_configs() if t.enabled and t.name != default_tool.name
+    ]
+
     def resolution(selection_method, **kwargs):
-        return ToolResolution(
-            tools=[default_tool], selection_method=selection_method, **kwargs
-        )
+        return ToolResolution(tools=tools, selection_method=selection_method, **kwargs)
 
     if puid or mime_type:
         return resolution("default_tool_caller_identified", puid=puid, mime_type=mime_type)
