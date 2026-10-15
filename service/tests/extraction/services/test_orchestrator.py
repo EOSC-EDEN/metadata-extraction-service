@@ -5,7 +5,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.extraction.adapters.base import ToolExecutionStatus
 from apps.extraction.services.format_identification import FFISResolution
-from apps.extraction.services.orchestrator import ExtractionOrchestrator
+from apps.extraction.services.orchestrator import ExtractionOrchestrator, _log_outcome
 from apps.extraction.tool_config import ToolConfig
 
 
@@ -146,3 +146,40 @@ class ToolStderrWarningTests(SimpleTestCase):
         result = ExtractionOrchestrator()._run([_unsaved_tool("exiftool")], "stub", "/tmp/f.jpg")
         self.assertEqual(result.results[0].status, ToolExecutionStatus.SUCCESS)
         self.assertEqual(result.results[0].warnings, ["Warning: minor issue"])
+
+
+class RequestIdLoggingTests(SimpleTestCase):
+    """Every log record emitted for a request carries its request_id (MES-REQ-5-001)."""
+
+    @mock.patch("apps.extraction.adapters.base.subprocess.run")
+    def test_tool_error_and_summary_records_carry_request_id(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="bad file"
+        )
+        tools = [_unsaved_tool("exiftool", is_mandatory=True)]
+
+        result = ExtractionOrchestrator()._run(tools, "stub", "/tmp/file.jpg")
+
+        with self.assertLogs("apps.extraction.services.orchestrator", level="INFO") as logs:
+            _log_outcome(result, "req-123")
+
+        self.assertGreaterEqual(len(logs.records), 2)
+        self.assertTrue(any("extraction finished" in r.getMessage() for r in logs.records))
+        self.assertEqual({r.request_id for r in logs.records}, {"req-123"})
+
+    def test_console_formatter_renders_request_id(self):
+        import logging
+
+        record = logging.LogRecord("apps.x", logging.INFO, __file__, 1, "hello", None, None)
+        record.request_id = "req-abc"
+        handler = logging.getLogger("apps").handlers[0]
+
+        self.assertIn("request_id=req-abc", handler.format(record))
+
+    def test_console_formatter_falls_back_when_request_id_missing(self):
+        import logging
+
+        record = logging.LogRecord("apps.x", logging.INFO, __file__, 1, "hello", None, None)
+        handler = logging.getLogger("apps").handlers[0]
+
+        self.assertIn("request_id=-", handler.format(record))

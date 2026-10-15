@@ -13,6 +13,7 @@ from apps.api.openapi import ExtractAutoSchema, LimitsAutoSchema, ToolsAutoSchem
 from apps.api.serializers import (
     ExtractionRequestSerializer,
     PayloadTooLarge,
+    check_declared_length,
     serialize_extraction_result,
 )
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
@@ -34,8 +35,9 @@ class ExtractMetadataView(APIView):
         started = time.perf_counter()
         outcome = "error"
         try:
-            serializer = ExtractionRequestSerializer(data=request.data)
             try:
+                check_declared_length(request.META.get("CONTENT_LENGTH"))
+                serializer = ExtractionRequestSerializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
             except (ValidationError, PayloadTooLarge):
                 outcome = "rejected"

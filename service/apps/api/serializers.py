@@ -33,6 +33,25 @@ def validate_upload_limit_config() -> None:
         )
 
 
+def check_declared_length(content_length) -> None:
+    """Reject a request whose declared body size cannot fit the upload limit.
+
+    Runs before the multipart body is parsed, so an oversized upload is refused without
+    Django spooling it to disk. The allowance covers the non-file form fields and multipart
+    framing (`DATA_UPLOAD_MAX_MEMORY_SIZE`); the exact file size is still checked by the
+    serializer. A missing or malformed header is left to the serializer.
+    """
+    try:
+        declared = int(content_length)
+    except (TypeError, ValueError):
+        return
+    limit = settings.MES_MAX_UPLOAD_BYTES
+    if declared > limit + settings.DATA_UPLOAD_MAX_MEMORY_SIZE:
+        raise PayloadTooLarge(
+            f"The request body is {declared} bytes, which exceeds the maximum upload of {limit} bytes."
+        )
+
+
 class ExtractionRequestSerializer(serializers.Serializer):
     file = serializers.FileField()
     puid = serializers.CharField(required=False, allow_blank=True, max_length=64)

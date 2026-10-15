@@ -95,3 +95,51 @@ class ExtractViewTests(TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertTrue(response.json()["errors"])
         self.assertNotIn("secret detail", response.content.decode())
+
+
+@override_settings(MES_MAX_UPLOAD_BYTES=100, DATA_UPLOAD_MAX_MEMORY_SIZE=50)
+class ContentLengthPrecheckTests(TestCase):
+    """The declared body size is checked before the upload is parsed or spooled to disk."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.url = "/api/v1/extract/"
+
+    def _post(self, content_length):
+        return self.client.post(
+            self.url, {"file": _upload(b"x")}, format="multipart", CONTENT_LENGTH=str(content_length)
+        )
+
+    @mock.patch("apps.api.views.ExtractionRequestSerializer")
+    def test_declared_length_over_limit_plus_overhead_is_413_without_parsing(self, serializer):
+        response = self._post(151)  # limit 100 + form-field allowance 50 + 1
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(len(response.json()["errors"]), 1)
+        self.assertIn("request_id", response.json())
+        serializer.assert_not_called()
+
+    def test_declared_length_boundaries(self):
+        from rest_framework.exceptions import APIException
+
+        from apps.api.serializers import PayloadTooLarge, check_declared_length
+
+        check_declared_length("150")  # limit 100 + allowance 50: accepted
+        check_declared_length("0")
+        check_declared_length(None)
+        check_declared_length("")
+        check_declared_length("not-a-number")
+        with self.assertRaises(PayloadTooLarge) as caught:
+            check_declared_length("151")
+        self.assertIsInstance(caught.exception, APIException)
+
+    def test_precheck_rejection_is_counted_as_rejected(self):
+        from prometheus_client import REGISTRY
+
+        labels = {"status": "rejected"}
+        before = REGISTRY.get_sample_value("mes_extract_requests_total", labels) or 0.0
+
+        self._post(10_000)
+
+        after = REGISTRY.get_sample_value("mes_extract_requests_total", labels)
+        self.assertEqual(after - before, 1)
