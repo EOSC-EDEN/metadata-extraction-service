@@ -9,7 +9,12 @@ class LimitsViewTests(TestCase):
 
     @override_settings(MES_MAX_UPLOAD_BYTES=1048576)
     def test_returns_configured_values(self):
-        self.assertEqual(self._limits(), {"max_upload_bytes": 1048576})
+        self.assertEqual(self._limits(), {"max_upload_bytes": 1048576, "async_enabled": True})
+
+    def test_reports_whether_async_is_enabled(self):
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled), override_settings(MES_ASYNC_ENABLED=enabled):
+                self.assertIs(self._limits()["async_enabled"], enabled)
 
     def test_post_not_allowed(self):
         self.assertEqual(self.client.post("/api/v1/limits/").status_code, 405)

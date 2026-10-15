@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML representation of the MES job envelope. Mirrors mes-job.schema.json:
+  snake_case JSON keys become camelCase elements.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:eden:mes:job:1"
+           targetNamespace="urn:eden:mes:job:1"
+           elementFormDefault="qualified">
+
+  <xs:element name="job">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="jobId" type="xs:string"/>
+        <xs:element name="status">
+          <xs:simpleType>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="pending"/>
+              <xs:enumeration value="running"/>
+              <xs:enumeration value="succeeded"/>
+              <xs:enumeration value="failed"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="createdAt" type="xs:dateTime"/>
+        <xs:element name="errors">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="item" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

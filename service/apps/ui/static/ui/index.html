@@ -263,6 +263,8 @@
       color: #1a1a2e;
     }
     #options input:focus { outline: none; border-color: #4f6ef7; }
+    #options label.async-option { flex-direction: row; align-items: center; gap: .5rem; flex-basis: 100%; }
+    #options label.async-option input { padding: 0; }
     .error-item {
       background: #fef2f2;
       border-left: 3px solid #dc2626;
@@ -326,6 +328,10 @@
     <label>MIME type (optional)
       <input type="text" id="mime-input" placeholder="e.g. image/jpeg" autocomplete="off" />
     </label>
+    <label class="async-option" style="display:none">
+      <input type="checkbox" id="async-checkbox" />
+      Process asynchronously (submit a job and wait for it to finish)
+    </label>
   </div>
 
   <div id="drop-zone">
@@ -337,7 +343,7 @@
 
   <div id="spinner">
     <div class="spin"></div>
-    <p style="color:#555">Extracting metadata…</p>
+    <p id="spinner-text" style="color:#555">Extracting metadata…</p>
   </div>
 
   <div id="error"></div>
@@ -403,6 +409,8 @@
   const optionsDiv = document.getElementById('options');
   const puidInput  = document.getElementById('puid-input');
   const mimeInput  = document.getElementById('mime-input');
+  const asyncCheckbox = document.getElementById('async-checkbox');
+  const spinnerText   = document.getElementById('spinner-text');
   const infoPanel  = document.getElementById('info-panel');
 
   // ── Service info panel: limits and tools ────────────────────
@@ -432,6 +440,9 @@
           `<div class="scheme">${esc(t.name)}</div>` +
           `<div class="value">${t.enabled ? 'enabled' : 'disabled'}${badges}</div></div>`;
       }).join('');
+
+      // Offer async processing only when the service has it enabled.
+      document.querySelector('label.async-option').style.display = limits.async_enabled === true ? '' : 'none';
 
       infoReady = true;
       infoPanel.style.display = '';
@@ -482,6 +493,7 @@
     if (infoReady) infoPanel.style.display = '';
     dropZone.style.display = '';
     spinner.style.display = 'none';
+    spinnerText.textContent = SPINNER_DEFAULT_TEXT;
     resultDiv.style.display = 'none';
     errorDiv.style.display = 'none';
     tryAgain.style.display = 'none';
@@ -496,6 +508,35 @@
       if (parts.length) return parts.join(' ');
     }
     return `HTTP ${status}`;
+  }
+
+  const SPINNER_DEFAULT_TEXT = spinnerText.textContent;
+  const POLL_START_MS = 500, POLL_MAX_MS = 5000, POLL_TIMEOUT_MS = 10 * 60 * 1000;
+
+  async function fetchJson(url, options) {
+    const resp = await fetch(url, options);
+    let data = null;
+    try { data = await resp.json(); } catch (_) { /* non-JSON error body */ }
+    if (!resp.ok) throw new Error(errorMessage(data, resp.status));
+    return data;
+  }
+
+  // Submit a job, poll its status with a growing interval until it ends (or the timeout),
+  // then fetch the result: the same document the synchronous endpoint returns.
+  async function extractAsync(form) {
+    let job = await fetchJson('/api/v1/jobs/', { method: 'POST', body: form });
+    const jobUrl = `/api/v1/jobs/${encodeURIComponent(job.job_id)}/`;
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    let delay = POLL_START_MS;
+    while (job.status === 'pending' || job.status === 'running') {
+      spinnerText.textContent = `Job ${job.status}…`;
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for the job to finish.');
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.5, POLL_MAX_MS);
+      job = await fetchJson(jobUrl);
+    }
+    if (job.status === 'failed') throw new Error((job.errors || []).join(' ') || 'The job failed.');
+    return fetchJson(jobUrl + 'result/');
   }
 
   async function extractFile(file) {
@@ -520,10 +561,9 @@
     if (mimeInput.value.trim()) form.append('mime_type', mimeInput.value.trim());
 
     try {
-      const resp = await fetch('/api/v1/extract/', { method: 'POST', body: form });
-      let data = null;
-      try { data = await resp.json(); } catch (_) { /* non-JSON error body */ }
-      if (!resp.ok) throw new Error(errorMessage(data, resp.status));
+      const data = asyncCheckbox.checked
+        ? await extractAsync(form)
+        : await fetchJson('/api/v1/extract/', { method: 'POST', body: form });
       renderResult(file, data);
     } catch (err) {
       errorDiv.textContent = '✗ ' + (err.message || 'Something went wrong. Please try again.');

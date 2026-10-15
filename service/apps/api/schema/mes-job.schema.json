@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:eden:mes:job:1",
+  "title": "MES job envelope",
+  "description": "Response of POST /api/v1/jobs/ (202) and GET /api/v1/jobs/{job_id}/. The result of a succeeded job is the mes-result document, served by GET /api/v1/jobs/{job_id}/result/. The XML representation (mes-job.xsd) carries the same content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_id", "status", "created_at", "errors"],
+  "properties": {
+    "job_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["pending", "running", "succeeded", "failed"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "errors": {
+      "description": "Why the job failed; empty unless status is failed.",
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

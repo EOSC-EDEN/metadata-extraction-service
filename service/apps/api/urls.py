@@ -5,7 +5,14 @@ from django.views.generic import TemplateView
 from rest_framework.schemas import get_schema_view
 
 from apps.api.openapi import SCHEMA_DIR
-from apps.api.views import ExtractMetadataView, LimitsView, ToolsView
+from apps.api.views import (
+    ExtractMetadataView,
+    JobResultView,
+    JobStatusView,
+    JobSubmitView,
+    LimitsView,
+    ToolsView,
+)
 
 app_name = "api"
 
@@ -20,6 +27,9 @@ def _schema_file(filename, content_type):
 
 urlpatterns = [
     path("extract/", ExtractMetadataView.as_view(), name="extract"),
+    path("jobs/", JobSubmitView.as_view(), name="job-submit"),
+    path("jobs/<str:job_id>/", JobStatusView.as_view(), name="job-status"),
+    path("jobs/<str:job_id>/result/", JobResultView.as_view(), name="job-result"),
     path("tools/", ToolsView.as_view(), name="tools"),
     path("limits/", LimitsView.as_view(), name="limits"),
     path(
@@ -31,6 +41,9 @@ urlpatterns = [
             url="/api/v1/",
             patterns=[
                 path("extract/", ExtractMetadataView.as_view()),
+                path("jobs/", JobSubmitView.as_view()),
+                path("jobs/<str:job_id>/", JobStatusView.as_view()),
+                path("jobs/<str:job_id>/result/", JobResultView.as_view()),
                 path("tools/", ToolsView.as_view()),
                 path("limits/", LimitsView.as_view()),
             ],
@@ -46,6 +59,16 @@ urlpatterns = [
         "schema/result.json",
         _schema_file("mes-result.schema.json", "application/schema+json"),
         name="result-json-schema",
+    ),
+    path(
+        "schema/job.json",
+        _schema_file("mes-job.schema.json", "application/schema+json"),
+        name="job-json-schema",
+    ),
+    path(
+        "schema/job.xsd",
+        _schema_file("mes-job.xsd", "application/xml"),
+        name="job-xsd",
     ),
     path(
         "schema/result.xsd",

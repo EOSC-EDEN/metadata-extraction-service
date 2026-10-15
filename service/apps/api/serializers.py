@@ -68,6 +68,16 @@ class ExtractionRequestSerializer(serializers.Serializer):
         return value
 
 
+def serialize_job(record) -> dict:
+    """The small job envelope returned by the `/api/v1/jobs/` endpoints."""
+    return {
+        "job_id": record.job_id,
+        "status": record.status.value,
+        "created_at": record.created_at.isoformat(),
+        "errors": list(record.errors),
+    }
+
+
 def _iso(value):
     return value.isoformat() if value else None
 

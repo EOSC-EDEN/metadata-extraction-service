@@ -68,6 +68,7 @@ The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted a
 - {{ MES-REQ-1-003 }} The service MAY be able to extract metadata based on the SIP & AIP Specification of the SIP2AIP Factory[^3]
 - {{ MES-REQ-1-004 }} The service MUST support mapping an identified file-format identifier, including a PRONOM PUID and/or mime types where available, to one or more configured metadata extraction tools.
 - {{ MES-REQ-1-005 }} The service MUST support the invocation of local cli and/or (externally) hosted services to extract metadata
+- {{ MES-REQ-1-006 }} The service MAY support EOSC AAI indicated authentication methods such as OpenIDConnect and/or OAuth2
 
 [^2]: https://github.com/libis/teneo-format_library
 [^3]: https://github.com/EOSC-EDEN/wp2-oais-packaging-information
@@ -94,7 +95,8 @@ The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted a
 - {{ MES-REQ-3-007 }} The output MUST identify which metadata extraction tool produced each metadata element or raw result.
 - {{ MES-REQ-3-008 }} The output MUST record the execution status of each invoked metadata extraction tool.
 - {{ MES-REQ-3-009 }} The output MUST identify which Format Library(s) were used to select the tools used for metadata extraction.
-- {{ MES-REQ-3-010 }} The service MAY be able to invoke a File Identification Service, if no POID or mime type has been supplied when invoking the service
+- {{ MES-REQ-3-010 }} The service SHOULD support asynchronous metadata extraction, allowing submitted files to be processed without requiring the client to wait for completion.
+- {{ MES-REQ-3-011 }} The service MAY be able to invoke a File Identification Service, if no POID or mime type has been supplied when invoking the service
 
 ### Requirement Group 4 – Wrapper
 - {{ MES-REQ-4-001 }} The wrapper MUST integrate the tool ExifTool

@@ -206,6 +206,18 @@ MES_MAX_CONCURRENT_TOOLS = int(os.environ.get("MES_MAX_CONCURRENT_TOOLS", "4"))
 # Larger files are rejected with HTTP 413 before any tool runs.
 MES_MAX_UPLOAD_BYTES = int(os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024 * 1024)))
 
+# Asynchronous extraction (POST /api/v1/jobs/) can be switched off: the jobs endpoints then
+# answer 404 and the UI hides its "Process asynchronously" option.
+MES_ASYNC_ENABLED = _env_flag("MES_ASYNC_ENABLED", "true")
+
+# The settings below are positive integers, validated at startup.
+# Jobs are held in memory, so this mode needs a single worker process (WEB_CONCURRENCY=1).
+# Background worker threads, the most jobs held at once (new ones get HTTP 503), and how long
+# a job's data stays available (from its finish, or from its creation if it never finishes).
+MES_ASYNC_MAX_WORKERS = int(os.environ.get("MES_ASYNC_MAX_WORKERS", "2"))
+MES_ASYNC_MAX_JOBS = int(os.environ.get("MES_ASYNC_MAX_JOBS", "100"))
+MES_JOB_TTL_SECONDS = int(os.environ.get("MES_JOB_TTL_SECONDS", "86400"))
+
 # Uploads above this size are spooled to disk instead of held in memory, and
 # non-file form fields are capped well below the file limit.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

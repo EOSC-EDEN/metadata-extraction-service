@@ -13,6 +13,7 @@ from xml.etree import ElementTree as ET
 from rest_framework.renderers import BaseRenderer
 
 NAMESPACE = "urn:eden:mes:result:1"
+JOB_NAMESPACE = "urn:eden:mes:job:1"
 
 _INVALID_XML_CHARS = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
 
@@ -122,6 +123,20 @@ def build_result_element(data: dict) -> ET.Element:
     return root
 
 
+_JOB_KEYS = {"job_id", "status", "created_at", "errors"}
+
+
+def build_job_element(data: dict) -> ET.Element:
+    """The job envelope; its own namespace (mes-job.xsd), not the result's."""
+    root = ET.Element(f"{{{JOB_NAMESPACE}}}job")
+    for name, key in (("jobId", "job_id"), ("status", "status"), ("createdAt", "created_at")):
+        ET.SubElement(root, f"{{{JOB_NAMESPACE}}}{name}").text = str(data[key])
+    errors = ET.SubElement(root, f"{{{JOB_NAMESPACE}}}errors")
+    for message in data["errors"]:
+        _set_text(ET.SubElement(errors, f"{{{JOB_NAMESPACE}}}item"), message)
+    return root
+
+
 class MESXMLRenderer(BaseRenderer):
     media_type = "application/xml"
     format = "xml"
@@ -130,6 +145,9 @@ class MESXMLRenderer(BaseRenderer):
     def render(self, data, accepted_media_type=None, renderer_context=None):
         if data is None:
             return b""
+        if isinstance(data, dict) and _JOB_KEYS <= data.keys():
+            ET.register_namespace("", JOB_NAMESPACE)
+            return ET.tostring(build_job_element(data), encoding="utf-8", xml_declaration=True)
         if not (isinstance(data, dict) and "results" in data):
             # Error payloads ({"errors": [...]}, DRF field errors) have no result schema.
             return self._render_error(data)

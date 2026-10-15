@@ -34,6 +34,16 @@ class UiTests(SimpleTestCase):
         self.assertIn("/api/v1/limits/", html)
         self.assertIn("/api/v1/tools/", html)
 
+    def test_page_has_async_option_and_jobs_endpoint(self):
+        html = b"".join(self.client.get("/").streaming_content).decode()
+        self.assertIn('id="async-checkbox"', html)
+        self.assertIn("/api/v1/jobs/", html)
+        # Hidden until the service reports that async processing is enabled.
+        self.assertRegex(html, r'<label class="async-option"[^>]*style="display:\s*none')
+        self.assertIn("async_enabled", html)
+        # The synchronous flow is untouched.
+        self.assertIn("/api/v1/extract/", html)
+
     def test_logo_is_served_as_svg(self):
         response = self.client.get("/logo-eden.svg")
         self.assertEqual(response.status_code, 200)

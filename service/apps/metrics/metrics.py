@@ -5,7 +5,7 @@ Helpers are the only API the rest of the code uses, so the instrumentation stays
 extraction wrapper.
 """
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from apps.extraction.adapters.base import ToolExecutionStatus
 
@@ -40,6 +40,21 @@ TOOL_DURATION = Histogram(
     "Duration of extraction tool executions.",
     ["tool"],
 )
+JOBS_WAITING = Gauge(
+    "mes_jobs_waiting",
+    "Asynchronous jobs accepted but not yet picked up for execution.",
+    multiprocess_mode="livesum",
+)
+JOBS_WAITING_BYTES = Gauge(
+    "mes_jobs_waiting_bytes",
+    "Size of the uploaded files of the jobs waiting to be picked up, in bytes.",
+    multiprocess_mode="livesum",
+)
+
+
+def set_jobs_waiting(count: int, size_bytes: int) -> None:
+    JOBS_WAITING.set(count)
+    JOBS_WAITING_BYTES.set(size_bytes)
 
 
 def record_request(status: str, duration_seconds: float) -> None:
@@ -60,11 +75,21 @@ def record_tool_results(results) -> None:
         )
 
 
-def classify_outcome(result) -> str:
-    """success: every tool succeeded; failed: none did; partial: anything in between."""
-    succeeded = [r for r in result.results if r.status == ToolExecutionStatus.SUCCESS]
+def _classify(statuses, has_errors: bool) -> str:
+    succeeded = [s for s in statuses if s == ToolExecutionStatus.SUCCESS.value]
     if not succeeded:
         return "failed"
-    if len(succeeded) == len(result.results) and not result.errors:
+    if len(succeeded) == len(statuses) and not has_errors:
         return "success"
     return "partial"
+
+
+def classify_outcome(result) -> str:
+    """success: every tool succeeded; failed: none did; partial: anything in between."""
+    return _classify([r.status.value for r in result.results], bool(result.errors))
+
+
+def classify_serialized_outcome(payload: dict) -> str:
+    """`classify_outcome` for a serialised result (the `mes-result` document)."""
+    statuses = [r["status"] for r in payload.get("results", [])]
+    return _classify(statuses, bool(payload.get("errors")))

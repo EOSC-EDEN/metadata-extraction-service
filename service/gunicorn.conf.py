@@ -4,7 +4,11 @@ import os
 import shutil
 
 bind = "0.0.0.0:8000"
-workers = 2
+# Asynchronous jobs are held in memory per process, so more than one worker process makes
+# /api/v1/jobs/ answer "no such job" whenever a request lands on another worker. One process
+# with several threads keeps requests concurrent; raise WEB_CONCURRENCY only without async jobs.
+workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
+threads = int(os.environ.get("GUNICORN_THREADS", "4"))
 timeout = 120
 
 _MULTIPROC_DIR = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
