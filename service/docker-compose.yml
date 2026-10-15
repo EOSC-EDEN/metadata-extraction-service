@@ -30,5 +30,5 @@ services:
   # Optional Apache Tika server: `docker compose --profile tika up`, with MES_TIKA_ENABLED=true.
   tika:
     profiles: ["tika"]
-    image: apache/tika:3.0.0.0-full
+    image: apache/tika:4.1.0-full
     restart: unless-stopped
