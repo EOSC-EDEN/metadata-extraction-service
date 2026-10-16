@@ -121,6 +121,10 @@ If the server is unreachable, returns an error, or times out, Tika is reported a
 
 See [`docs/adding-a-tool.md`](docs/adding-a-tool.md) for a step-by-step guide to configuring a new extraction tool.
 
+## Architecture diagrams
+
+See [`docs/diagrams.md`](docs/diagrams.md) for sequence diagrams of the synchronous extraction flow, the local CLI tool path (ExifTool), the hosted HTTP service path (Apache Tika) and the asynchronous job lifecycle.
+
 ## Contributing
 
 Contributions are welcome via pull request. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the branch policy and pull request process, and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for expected standards of behaviour.
