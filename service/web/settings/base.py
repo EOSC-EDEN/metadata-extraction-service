@@ -210,13 +210,21 @@ MES_MAX_UPLOAD_BYTES = int(os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024
 # answer 404 and the UI hides its "Process asynchronously" option.
 MES_ASYNC_ENABLED = _env_flag("MES_ASYNC_ENABLED", "true")
 
-# The settings below are positive integers, validated at startup.
-# Jobs are held in memory, so this mode needs a single worker process (WEB_CONCURRENCY=1).
+# The three settings below are positive integers, validated at startup.
 # Background worker threads, the most jobs held at once (new ones get HTTP 503), and how long
 # a job's data stays available (from its finish, or from its creation if it never finishes).
 MES_ASYNC_MAX_WORKERS = int(os.environ.get("MES_ASYNC_MAX_WORKERS", "2"))
 MES_ASYNC_MAX_JOBS = int(os.environ.get("MES_ASYNC_MAX_JOBS", "100"))
 MES_JOB_TTL_SECONDS = int(os.environ.get("MES_JOB_TTL_SECONDS", "86400"))
+
+# Where job state lives: "memory" (the default; one gunicorn worker process only, jobs are lost on
+# restart) or "redis" (shared by all workers, survives restarts; needs MES_REDIS_URL).
+MES_JOB_STORE = os.environ.get("MES_JOB_STORE", "memory")
+MES_REDIS_URL = os.environ.get("MES_REDIS_URL", "")
+
+# Directory for uploads while they are being processed (job uploads, and the temporary files of
+# the synchronous endpoint). Mount a volume here in containers; created at startup if missing.
+MES_JOB_UPLOAD_DIR = os.environ.get("MES_JOB_UPLOAD_DIR", "/var/lib/mes/uploads")
 
 # Uploads above this size are spooled to disk instead of held in memory, and
 # non-file form fields are capped well below the file limit.

@@ -5,9 +5,15 @@ Helpers are the only API the rest of the code uses, so the instrumentation stays
 extraction wrapper.
 """
 
-from prometheus_client import Counter, Gauge, Histogram
+import logging
+
+from prometheus_client import Counter, Histogram
+from prometheus_client.core import GaugeMetricFamily
+from prometheus_client.registry import Collector
 
 from apps.extraction.adapters.base import ToolExecutionStatus
+
+logger = logging.getLogger(__name__)
 
 # 1 KiB .. 10 GiB, so uploads from tiny images to large video files land in distinct buckets.
 FILE_SIZE_BUCKETS = tuple(1024 * 4**n for n in range(0, 12))
@@ -40,21 +46,36 @@ TOOL_DURATION = Histogram(
     "Duration of extraction tool executions.",
     ["tool"],
 )
-JOBS_WAITING = Gauge(
-    "mes_jobs_waiting",
-    "Asynchronous jobs accepted but not yet picked up for execution.",
-    multiprocess_mode="livesum",
-)
-JOBS_WAITING_BYTES = Gauge(
-    "mes_jobs_waiting_bytes",
-    "Size of the uploaded files of the jobs waiting to be picked up, in bytes.",
-    multiprocess_mode="livesum",
-)
 
 
-def set_jobs_waiting(count: int, size_bytes: int) -> None:
-    JOBS_WAITING.set(count)
-    JOBS_WAITING_BYTES.set(size_bytes)
+class JobsWaitingCollector(Collector):
+    """`mes_jobs_waiting` and `mes_jobs_waiting_bytes`, read from the job store at scrape time.
+
+    These are not per-process gauges on purpose: with a shared (Redis) store every worker would
+    report the same global count, and Prometheus' multiprocess mode would add those up. Reading
+    the store once per scrape gives the true number for any store and worker count. A store that
+    cannot be read leaves the two metrics out; the rest of the scrape is unaffected.
+    """
+
+    def __init__(self, waiting):
+        self._waiting = waiting
+
+    def collect(self):
+        try:
+            count, size_bytes = self._waiting()
+        except Exception:
+            logger.exception("could not read the waiting jobs; omitting mes_jobs_waiting*")
+            return
+        yield GaugeMetricFamily(
+            "mes_jobs_waiting",
+            "Asynchronous jobs accepted but not yet picked up for execution.",
+            value=count,
+        )
+        yield GaugeMetricFamily(
+            "mes_jobs_waiting_bytes",
+            "Size of the uploaded files of the jobs waiting to be picked up, in bytes.",
+            value=size_bytes,
+        )
 
 
 def record_request(status: str, duration_seconds: float) -> None:

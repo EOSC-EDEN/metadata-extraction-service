@@ -3,7 +3,8 @@ FROM python:3.14-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=web.settings.prod \
-    PROMETHEUS_MULTIPROC_DIR=/tmp/mes-metrics
+    PROMETHEUS_MULTIPROC_DIR=/tmp/mes-metrics \
+    MES_JOB_UPLOAD_DIR=/var/lib/mes/uploads
 
 # Extraction tools are optional build args: enable with --build-arg INSTALL_<TOOL>=true,
 # disable with =false. ExifTool and MediaInfo are on by default; the rest are opt-in.
@@ -27,7 +28,8 @@ RUN set -eu; \
     fi
 
 RUN useradd --system --create-home --uid 10001 mes \
-    && mkdir -p /tmp/mes-metrics && chown mes:mes /tmp/mes-metrics
+    && mkdir -p /tmp/mes-metrics /var/lib/mes/uploads \
+    && chown mes:mes /tmp/mes-metrics /var/lib/mes/uploads
 
 WORKDIR /app
 COPY requirements.txt .

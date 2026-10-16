@@ -4,9 +4,10 @@ import os
 import shutil
 
 bind = "0.0.0.0:8000"
-# Asynchronous jobs are held in memory per process, so more than one worker process makes
-# /api/v1/jobs/ answer "no such job" whenever a request lands on another worker. One process
-# with several threads keeps requests concurrent; raise WEB_CONCURRENCY only without async jobs.
+# With MES_JOB_STORE=memory (the default) asynchronous jobs live in one process, so more than one
+# worker process makes /api/v1/jobs/ answer "no such job" whenever a request lands on another
+# worker: keep WEB_CONCURRENCY=1 and use GUNICORN_THREADS for request concurrency. With
+# MES_JOB_STORE=redis the jobs are shared and WEB_CONCURRENCY can be raised.
 workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
 threads = int(os.environ.get("GUNICORN_THREADS", "4"))
 timeout = 120

@@ -74,7 +74,7 @@ class ExtractMetadataView(RequestIdMixin, APIView):
 
             # Keep the original suffix: some tools rely on the extension.
             suffix = os.path.splitext(upload.name)[1]
-            with tempfile.TemporaryDirectory() as tmp_dir:
+            with tempfile.TemporaryDirectory(dir=settings.MES_JOB_UPLOAD_DIR) as tmp_dir:
                 path = os.path.join(tmp_dir, f"upload{suffix}")
                 with open(path, "wb") as handle:
                     for chunk in upload.chunks():
@@ -121,7 +121,7 @@ class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
         metrics.record_upload(upload.size)
 
         # Kept until the job finishes (the job removes it); removed here if it is never queued.
-        work_dir = tempfile.mkdtemp()
+        work_dir = tempfile.mkdtemp(dir=settings.MES_JOB_UPLOAD_DIR)
         try:
             path = os.path.join(work_dir, f"upload{os.path.splitext(upload.name)[1]}")
             with open(path, "wb") as handle:

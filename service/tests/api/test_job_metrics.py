@@ -48,36 +48,43 @@ def _submit(service, size_bytes):
     )
 
 
-class WaitingGaugeTests(SimpleTestCase):
-    def test_gauges_track_jobs_waiting_for_a_worker(self):
+class WaitingJobsTests(SimpleTestCase):
+    """`mes_jobs_waiting*` come from `JobService.waiting()` at scrape time (see JobsWaitingCollector)."""
+
+    def test_counts_the_jobs_waiting_for_a_worker_and_their_bytes(self):
         executor = DeferredExecutor()
         service, _ = _service(lambda **kw: {}, executor)
         _submit(service, 1000)
         _submit(service, 2500)
-        self.assertEqual(_sample("mes_jobs_waiting"), 2)
-        self.assertEqual(_sample("mes_jobs_waiting_bytes"), 3500)
+        self.assertEqual(service.waiting(), (2, 3500))
         executor.run_all()
-        self.assertEqual(_sample("mes_jobs_waiting"), 0)
-        self.assertEqual(_sample("mes_jobs_waiting_bytes"), 0)
+        self.assertEqual(service.waiting(), (0, 0))
 
     def test_a_job_being_executed_is_not_waiting(self):
         seen = []
         executor = DeferredExecutor()
-        service, _ = _service(
-            lambda **kw: seen.append((_sample("mes_jobs_waiting"), _sample("mes_jobs_waiting_bytes"))) or {},
-            executor,
-        )
+        holder = {}
+        service, _ = _service(lambda **kw: seen.append(holder["service"].waiting()) or {}, executor)
+        holder["service"] = service
         _submit(service, 10)
         executor.run_all()
-        self.assertEqual(seen, [(0.0, 0.0)])
+        self.assertEqual(seen, [(0, 0)])
 
-    def test_expiry_of_a_waiting_job_updates_the_gauges(self):
+    def test_an_expired_waiting_job_is_not_counted_even_if_nobody_touched_it(self):
         service, clock = _service(lambda **kw: {}, DeferredExecutor())
-        expiring = _submit(service, 100)
-        clock.advance(TTL)
-        service.get(expiring.job_id)
-        self.assertEqual(_sample("mes_jobs_waiting"), 0)
-        self.assertEqual(_sample("mes_jobs_waiting_bytes"), 0)
+        _submit(service, 100)
+        clock.advance(TTL - 1)
+        self.assertEqual(service.waiting(), (1, 100))
+        clock.advance(1)
+        self.assertEqual(service.waiting(), (0, 0))
+
+    def test_the_waiting_numbers_are_not_per_process_gauges(self):
+        # A per-worker gauge would be summed over all gunicorn workers and multiply a shared
+        # store's global count; the numbers must only exist as a scrape-time collector.
+        service, _ = _service(lambda **kw: {}, DeferredExecutor())
+        _submit(service, 5)
+        self.assertIsNone(REGISTRY.get_sample_value("mes_jobs_waiting"))
+        self.assertIsNone(REGISTRY.get_sample_value("mes_jobs_waiting_bytes"))
 
 
 class JobRequestCountTests(SimpleTestCase):

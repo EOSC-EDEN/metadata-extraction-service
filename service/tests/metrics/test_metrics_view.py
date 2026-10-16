@@ -3,6 +3,9 @@ import tempfile
 from unittest import mock
 
 from django.test import TestCase, override_settings
+from prometheus_client import CollectorRegistry, generate_latest
+
+from apps.metrics.metrics import JobsWaitingCollector
 
 from apps.api.jobs import InMemoryJobStore, JobService
 from tests.api.job_helpers import DeferredExecutor, FakeClock
@@ -71,3 +74,41 @@ class JobsWaitingAtScrapeTests(TestCase):
         with mock.patch("apps.metrics.views.get_job_service") as get_service:
             self.assertEqual(self.client.get("/metrics").status_code, 200)
         get_service.assert_not_called()
+
+
+class JobsWaitingCollectorTests(TestCase):
+    def _text(self, waiting):
+        registry = CollectorRegistry()
+        registry.register(JobsWaitingCollector(waiting))
+        return generate_latest(registry).decode()
+
+    def test_emits_both_gauges_from_the_callable(self):
+        text = self._text(lambda: (3, 4096))
+        self.assertIn("# TYPE mes_jobs_waiting gauge", text)
+        self.assertIn("mes_jobs_waiting 3.0", text)
+        self.assertIn("mes_jobs_waiting_bytes 4096.0", text)
+
+    def test_calls_the_callable_once_per_scrape(self):
+        waiting = mock.Mock(return_value=(1, 2))
+        self._text(waiting)
+        waiting.assert_called_once_with()
+
+    def test_a_failing_store_omits_the_gauges_instead_of_failing_the_scrape(self):
+        with self.assertLogs("apps.metrics.metrics", "ERROR"):
+            text = self._text(mock.Mock(side_effect=ConnectionError("redis is down")))
+        self.assertNotIn("mes_jobs_waiting", text)
+
+    def test_the_scrape_still_succeeds_when_the_job_store_is_down(self):
+        service = mock.Mock()
+        service.waiting.side_effect = ConnectionError("redis is down")
+        with mock.patch("apps.metrics.views.get_job_service", return_value=service):
+            with self.assertLogs("apps.metrics.metrics", "ERROR"):
+                response = self.client.get("/metrics")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("mes_extract_requests_total", response.content.decode())
+
+    @override_settings(MES_ASYNC_ENABLED=False)
+    def test_reports_zero_when_async_is_disabled(self):
+        body = self.client.get("/metrics").content.decode()
+        self.assertIn("mes_jobs_waiting 0.0", body)
+        self.assertIn("mes_jobs_waiting_bytes 0.0", body)
