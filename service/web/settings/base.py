@@ -182,6 +182,15 @@ MES_TOOLS = {
         "enabled": _env_flag("MES_IMAGEMAGICK_ENABLED"),
         "mandatory": False,
     },
+    "metaflac": {
+        "adapter": "apps.extraction.adapters.metaflac.MetaflacAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_METAFLAC_COMMAND", "metaflac"),
+        "extra_args": [],
+        "timeout_seconds": 30,
+        "enabled": _env_flag("MES_METAFLAC_ENABLED"),
+        "mandatory": False,
+    },
     "tika": {
         "adapter": "apps.extraction.adapters.tika.TikaAdapter",
         "kind": "http",

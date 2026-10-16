@@ -28,6 +28,7 @@ services:
         INSTALL_MEDIAINFO: ${INSTALL_MEDIAINFO:-true}
         INSTALL_FFPROBE: ${INSTALL_FFPROBE:-false}
         INSTALL_IMAGEMAGICK: ${INSTALL_IMAGEMAGICK:-false}
+        INSTALL_METAFLAC: ${INSTALL_METAFLAC:-false}
     ports:
       - "8000:8000"
     environment:
@@ -39,6 +40,7 @@ services:
       # Opt-in tools (set to true once the tool is installed / reachable).
       MES_FFPROBE_ENABLED: ${MES_FFPROBE_ENABLED:-false}
       MES_IMAGEMAGICK_ENABLED: ${MES_IMAGEMAGICK_ENABLED:-false}
+      MES_METAFLAC_ENABLED: ${MES_METAFLAC_ENABLED:-false}
       MES_TIKA_ENABLED: ${MES_TIKA_ENABLED:-false}
       MES_TIKA_URL: ${MES_TIKA_URL:-http://tika:9998}
     volumes:

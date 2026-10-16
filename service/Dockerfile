@@ -14,6 +14,7 @@ ARG INSTALL_EXIFTOOL=true
 ARG INSTALL_MEDIAINFO=true
 ARG INSTALL_FFPROBE=false
 ARG INSTALL_IMAGEMAGICK=false
+ARG INSTALL_METAFLAC=false
 
 RUN set -eu; \
     packages=""; \
@@ -21,6 +22,7 @@ RUN set -eu; \
     [ "$INSTALL_MEDIAINFO" = "true" ] && packages="$packages mediainfo"; \
     [ "$INSTALL_FFPROBE" = "true" ] && packages="$packages ffmpeg"; \
     [ "$INSTALL_IMAGEMAGICK" = "true" ] && packages="$packages imagemagick"; \
+    [ "$INSTALL_METAFLAC" = "true" ] && packages="$packages flac"; \
     if [ -n "$packages" ]; then \
         apt-get update; \
         apt-get install -y --no-install-recommends $packages; \

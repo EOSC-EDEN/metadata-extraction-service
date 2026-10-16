@@ -34,6 +34,7 @@ class DefaultToolSetTests(SimpleTestCase):
         "mediainfo": "MediaInfoAdapter",
         "ffprobe": "FFprobeAdapter",
         "imagemagick": "ImageMagickAdapter",
+        "metaflac": "MetaflacAdapter",
         "tika": "TikaAdapter",
     }
 
