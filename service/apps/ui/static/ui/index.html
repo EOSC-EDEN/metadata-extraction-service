@@ -184,6 +184,9 @@
       vertical-align: top;
     }
     .tool-table tr:last-child td { border-bottom: none; }
+    .tool-table tr.has-raw td { border-bottom: none; padding-bottom: 0; }
+    .tool-table tr.raw-row td { padding-top: .25rem; }
+    .tool-table tr.raw-row details.raw { margin-top: 0; }
     .tool-table .col-tool { font-weight: 600; color: #1a1a2e; }
     .tool-table .col-tool small { display: block; font-weight: 400; color: #888; font-size: .78rem; }
     .tool-table .col-format { color: #333; }
@@ -656,7 +659,7 @@
     table.className = 'tool-table';
     const thead = table.createTHead();
     const hrow = thead.insertRow();
-    ['Tool', 'Status', 'Raw output'].forEach(h => {
+    ['Tool', 'Status'].forEach(h => {
       const th = document.createElement('th');
       th.textContent = h;
       hrow.appendChild(th);
@@ -680,13 +683,14 @@
         + (r.warnings?.length
             ? `<small>${r.warnings.map(esc).join('<br>')}</small>` : '');
 
-      const td2 = tr.insertCell();
-      td2.className = 'col-format';
       if (r.raw_output) {
+        tr.classList.add('has-raw');
+        const rawTr = tbody.insertRow();
+        rawTr.className = 'raw-row';
+        const td2 = rawTr.insertCell();
+        td2.colSpan = 2;
         td2.innerHTML = `<details class="raw"><summary>Show ${esc(r.raw_output_format || 'text')} output</summary>`
           + `<pre>${esc(r.raw_output)}</pre></details>`;
-      } else {
-        td2.textContent = '—';
       }
     });
 
