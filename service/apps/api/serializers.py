@@ -12,6 +12,7 @@ from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
 
+from apps.api import premis
 from apps.extraction.adapters.base import ToolInvocationResult
 from apps.extraction.services.orchestrator import AggregatedExtractionResult
 
@@ -56,6 +57,17 @@ class ExtractionRequestSerializer(serializers.Serializer):
     file = serializers.FileField()
     puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
     mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    object_identifier = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    object_identifier_type = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+    def validate(self, attrs):
+        # Blank counts as not supplied (multipart forms send empty fields), as for puid and mime_type.
+        given = [bool(attrs.get(name)) for name in ("object_identifier", "object_identifier_type")]
+        if any(given) and not all(given):
+            raise serializers.ValidationError(
+                "object_identifier and object_identifier_type must be given together."
+            )
+        return attrs
 
     def validate_file(self, value):
         if value.size == 0:
@@ -82,6 +94,15 @@ def _iso(value):
     return value.isoformat() if value else None
 
 
+def _error_fields(error_details) -> dict:
+    """`errors`, `error_categories` and `error_details`, all derived from one list so they cannot drift."""
+    return {
+        "errors": [d.message for d in error_details],
+        "error_categories": [d.category for d in error_details],
+        "error_details": [{"message": d.message, "category": d.category} for d in error_details],
+    }
+
+
 def _serialize_tool_result(result: ToolInvocationResult) -> dict:
     return {
         "tool": result.tool_name,
@@ -92,14 +113,19 @@ def _serialize_tool_result(result: ToolInvocationResult) -> dict:
         "command": list(result.command) if result.command else None,
         "raw_output": result.raw_output,
         "raw_output_format": result.raw_output_format,
-        "errors": list(result.errors),
+        **_error_fields(result.error_details),
         "warnings": list(result.warnings),
     }
 
 
 def serialize_extraction_result(
-    result: AggregatedExtractionResult, request_id: str, filename: str
+    result: AggregatedExtractionResult,
+    request_id: str,
+    filename: str,
+    object_identifier: str | None = None,
+    object_identifier_type: str | None = None,
 ) -> dict:
+    timestamp = datetime.now(timezone.utc).isoformat()  # computed once: provenance and event share it
     return {
         "request_id": request_id,
         "filename": filename,
@@ -112,11 +138,20 @@ def serialize_extraction_result(
         },
         "results": [_serialize_tool_result(r) for r in result.results],
         "provenance": {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": timestamp,
             "service_version": SERVICE_VERSION,
             "tool_versions": {r.tool_name: r.tool_version for r in result.results},
+            "event": premis.build_event(
+                result,
+                request_id=request_id,
+                timestamp=timestamp,
+                filename=filename,
+                object_identifier=object_identifier,
+                object_identifier_type=object_identifier_type,
+            ),
+            "agents": premis.build_agents(result, service_version=SERVICE_VERSION),
             "ffis": result.ffis_provenance,
         },
-        "errors": list(result.errors),
+        **_error_fields(result.error_details),
         "warnings": list(result.warnings),
     }

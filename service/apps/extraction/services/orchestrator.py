@@ -15,7 +15,13 @@ from datetime import datetime, timezone
 
 from django.conf import settings
 
-from apps.extraction.adapters.base import HTTPToolAdapter, ToolExecutionStatus, ToolInvocationResult
+from apps.extraction.adapters.base import (
+    ErrorCategory,
+    ErrorDetail,
+    HTTPToolAdapter,
+    ToolExecutionStatus,
+    ToolInvocationResult,
+)
 from apps.extraction.adapters.registry import get_adapter_class
 from apps.extraction.services.tool_resolution import ToolResolution, resolve_tools
 from apps.extraction.tool_config import ToolConfig
@@ -28,13 +34,32 @@ class AggregatedExtractionResult:
     resolved_tools: tuple[str, ...]
     selection_method: str
     results: tuple[ToolInvocationResult, ...]
-    errors: list[str] = field(default_factory=list)
+    error_details: tuple[ErrorDetail, ...] = ()
     warnings: list[str] = field(default_factory=list)
     puid: str | None = None
     mime_type: str | None = None
     #: FFIS's per-engine provenance, present only when FFIS identified the file.
     ffis_provenance: dict | None = None
     identification_url: str | None = None
+
+    @property
+    def errors(self) -> list[str]:
+        return [detail.message for detail in self.error_details]
+
+    @property
+    def outcome(self) -> str:
+        """`success`, `partial` or `failed`; the one rule shared by the PREMIS event and the metrics."""
+        return classify_statuses([r.status.value for r in self.results], bool(self.error_details))
+
+
+def classify_statuses(statuses, has_errors: bool) -> str:
+    """success: every tool succeeded and there are no errors; failed: none succeeded; else partial."""
+    succeeded = [s for s in statuses if s == ToolExecutionStatus.SUCCESS.value]
+    if not succeeded:
+        return "failed"
+    if len(succeeded) == len(statuses) and not has_errors:
+        return "success"
+    return "partial"
 
 
 class ExtractionOrchestrator:
@@ -60,7 +85,7 @@ class ExtractionOrchestrator:
             resolved_tools=tuple(tool.name for tool in tools),
             selection_method=selection_method,
             results=tuple(results),
-            errors=errors,
+            error_details=tuple(errors),
             warnings=warnings,
             puid=resolution.puid if resolution else None,
             mime_type=resolution.mime_type if resolution else None,
@@ -105,11 +130,11 @@ class ExtractionOrchestrator:
             started_at=now,
             finished_at=now,
             command=None,
-            errors=[f"{type(exc).__name__}: {exc}"],
+            error_details=(ErrorDetail(f"{type(exc).__name__}: {exc}"),),
             warnings=[],
         )
 
-    def _mandatory_tool_errors(self, tools, results) -> list[str]:
+    def _mandatory_tool_errors(self, tools, results) -> list[ErrorDetail]:
         results_by_name = {result.tool_name: result for result in results}
         errors = []
         for tool in tools:
@@ -117,7 +142,12 @@ class ExtractionOrchestrator:
                 continue
             result = results_by_name.get(tool.name)
             if result is None or result.status != ToolExecutionStatus.SUCCESS:
-                errors.append(_describe_incomplete(tool.name, result, "Mandatory tool"))
+                errors.append(
+                    ErrorDetail(
+                        _describe_incomplete(tool.name, result, "Mandatory tool"),
+                        _first_category(result),
+                    )
+                )
         return errors
 
     def _optional_tool_warnings(self, tools, results) -> list[str]:
@@ -154,6 +184,13 @@ def _log_outcome(result: AggregatedExtractionResult, request_id) -> None:
         len(result.warnings),
         extra=extra,
     )
+
+
+def _first_category(result) -> str:
+    """A mandatory tool's top-level error carries the category of its (first) tool error."""
+    if result is not None and result.error_details:
+        return result.error_details[0].category
+    return ErrorCategory.UNKNOWN
 
 
 def _describe_incomplete(name, result, label) -> str:

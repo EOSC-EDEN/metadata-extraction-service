@@ -95,6 +95,13 @@ class SubmitTests(SimpleTestCase):
         self.assertEqual(received["request_id"], "req-1")
         self.assertTrue(received["file_path"].endswith("upload.bin"))
 
+    def test_extract_receives_the_object_identifier(self):
+        received = {}
+        service, _ = _service(extract=lambda **kwargs: received.update(kwargs) or {})
+        _submit(service, object_identifier="u-1", object_identifier_type="UUID")
+        self.assertEqual(received["object_identifier"], "u-1")
+        self.assertEqual(received["object_identifier_type"], "UUID")
+
     def test_failure_is_recorded_and_upload_removed(self):
         def boom(**kwargs):
             raise RuntimeError("tool exploded")

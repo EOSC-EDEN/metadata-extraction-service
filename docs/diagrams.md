@@ -29,7 +29,9 @@ tool ({{ MES-REQ-1-001 }}). The resolved tools then run concurrently in a thread
 `MES_MAX_CONCURRENT_TOOLS`. The two per-tool paths are shown in detail in the next two diagrams.
 
 Failure handling ({{ MES-REQ-3-006 }}, {{ MES-REQ-3-008 }}, {{ MES-REQ-5-001 }}): a failed tool is always
-reported in its own result and never discards the other tools' results. A failed **optional** tool
+reported in its own result and never discards the other tools' results. Every error carries a
+category (`encrypted`, `truncated_or_broken`, `wrong_format` or `unknown`) assigned by the adapter
+(see the two per-tool diagrams); warnings are not categorised. A failed **optional** tool
 also adds a top-level *warning*; a failed **mandatory** tool adds a top-level *error*. No tool is
 mandatory in the default `MES_TOOLS` configuration.
 
@@ -87,7 +89,7 @@ sequenceDiagram
         Adapter-->>Pool: ToolInvocationResult (never raises)
     end
     Pool-->>Orch: results
-    Orch->>Orch: failed mandatory tools become top-level errors
+    Orch->>Orch: failed mandatory tools become top-level errors (with the category of the tool's first error)
     Orch->>Orch: failed optional tools become top-level warnings
     Orch->>Orch: log every error and warning with the request_id
     Orch-->>API: AggregatedExtractionResult
@@ -98,7 +100,8 @@ sequenceDiagram
 ## Sequence diagram — local CLI tool path (ExifTool)
 
 What `run()` does for a `SubprocessToolAdapter`. `run()` never raises: whatever `invoke()` throws is
-mapped to a status.
+mapped to a status. Each error message is labelled by the adapter's `classify_error()` (its own
+`error_patterns`; `unknown` when nothing matches), and `error_details` holds `(message, category)` pairs.
 
 ```mermaid
 sequenceDiagram
@@ -121,10 +124,12 @@ sequenceDiagram
         Adapter-->>Orch: ToolInvocationResult(SUCCESS, raw_output, warnings)
     else non-zero exit or binary not found
         CLI-->>Adapter: CalledProcessError or OSError
-        Adapter-->>Orch: ToolInvocationResult(FAILURE, errors)
+        Adapter->>Adapter: classify_error(message) for each error
+        Adapter-->>Orch: ToolInvocationResult(FAILURE, error_details)
     else timeout
         CLI-->>Adapter: TimeoutExpired
-        Adapter-->>Orch: ToolInvocationResult(TIMEOUT, errors)
+        Adapter->>Adapter: classify_error(message) for each error
+        Adapter-->>Orch: ToolInvocationResult(TIMEOUT, error_details)
     end
 ```
 
@@ -151,10 +156,12 @@ sequenceDiagram
         Adapter-->>Orch: ToolInvocationResult(SUCCESS, raw_output)
     else non-2xx or connection error
         Tika-->>Adapter: HTTP error (raise_for_status) or RequestException
-        Adapter-->>Orch: ToolInvocationResult(FAILURE, errors)
+        Adapter->>Adapter: classify_error(message) for each error
+        Adapter-->>Orch: ToolInvocationResult(FAILURE, error_details)
     else timeout
         Tika-->>Adapter: requests.exceptions.Timeout
-        Adapter-->>Orch: ToolInvocationResult(TIMEOUT, errors)
+        Adapter->>Adapter: classify_error(message) for each error
+        Adapter-->>Orch: ToolInvocationResult(TIMEOUT, error_details)
     end
     note over Orch: if Tika is configured as mandatory, a FAILURE or TIMEOUT also becomes a top-level error (MES-REQ-3-006)
 ```

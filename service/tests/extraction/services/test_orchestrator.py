@@ -183,3 +183,24 @@ class RequestIdLoggingTests(SimpleTestCase):
         handler = logging.getLogger("apps").handlers[0]
 
         self.assertIn("request_id=-", handler.format(record))
+
+
+class MandatoryErrorCategoryTests(SimpleTestCase):
+    def test_mandatory_top_level_error_carries_tool_category(self):
+        from datetime import datetime, timezone
+
+        from apps.extraction.adapters.base import ErrorDetail, ToolInvocationResult
+
+        now = datetime.now(timezone.utc)
+        failed = ToolInvocationResult(
+            tool_name="exiftool", tool_version=None, status=ToolExecutionStatus.FAILURE,
+            raw_output=None, raw_output_format=None, started_at=now, finished_at=now, command=None,
+            error_details=(ErrorDetail("Encrypted", "encrypted"),),
+        )
+        tool = _unsaved_tool("exiftool", is_mandatory=True)
+        errors = ExtractionOrchestrator()._mandatory_tool_errors([tool], [failed])
+        self.assertEqual([e.category for e in errors], ["encrypted"])
+
+    def test_missing_result_is_unknown(self):
+        errors = ExtractionOrchestrator()._mandatory_tool_errors([_unsaved_tool("x", True)], [])
+        self.assertEqual([e.category for e in errors], ["unknown"])

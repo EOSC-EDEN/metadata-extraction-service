@@ -50,12 +50,20 @@ _JOB_SETTINGS = ("MES_ASYNC_MAX_WORKERS", "MES_ASYNC_MAX_JOBS", "MES_JOB_TTL_SEC
 _UNEXPECTED_ERROR = "An unexpected error occurred while processing the job."
 
 
-def _extract_and_serialize(*, file_path, filename, puid, mime_type, request_id) -> dict:
+def _extract_and_serialize(
+    *, file_path, filename, puid, mime_type, object_identifier, object_identifier_type, request_id
+) -> dict:
     result = ExtractionOrchestrator().extract(
         file_path, puid=puid, mime_type=mime_type, request_id=request_id
     )
     metrics.record_tool_results(result.results)
-    return serialize_extraction_result(result, request_id, filename)
+    return serialize_extraction_result(
+        result,
+        request_id,
+        filename,
+        object_identifier=object_identifier,
+        object_identifier_type=object_identifier_type,
+    )
 
 
 def _utcnow():
@@ -71,7 +79,17 @@ class JobService:
         self._extract = extract
 
     def submit(
-        self, *, file_path, work_dir, filename, puid, mime_type, request_id, size_bytes
+        self,
+        *,
+        file_path,
+        work_dir,
+        filename,
+        puid,
+        mime_type,
+        request_id,
+        size_bytes,
+        object_identifier=None,
+        object_identifier_type=None,
     ) -> JobRecord:
         """Queue a job. The caller owns `work_dir` until this returns; afterwards the job does
         (it is removed when the job finishes). Raises `JobStoreFull` when at capacity."""
@@ -87,7 +105,16 @@ class JobService:
         self._store.create(record)
         try:
             self._executor.submit(
-                self._run, record.job_id, file_path, work_dir, filename, puid, mime_type, request_id
+                self._run,
+                record.job_id,
+                file_path,
+                work_dir,
+                filename,
+                puid,
+                mime_type,
+                request_id,
+                object_identifier,
+                object_identifier_type,
             )
         except Exception:
             self._finish(record.job_id, JobStatus.FAILED, errors=[_UNEXPECTED_ERROR])
@@ -115,7 +142,18 @@ class JobService:
         """The upload directories of the jobs currently stored."""
         return self._store.work_dirs()
 
-    def _run(self, job_id, file_path, work_dir, filename, puid, mime_type, request_id):
+    def _run(
+        self,
+        job_id,
+        file_path,
+        work_dir,
+        filename,
+        puid,
+        mime_type,
+        request_id,
+        object_identifier=None,
+        object_identifier_type=None,
+    ):
         extra = {"request_id": request_id}
         record = self._store.get(job_id)
         if record is None:  # expired while waiting: its upload is already gone
@@ -133,6 +171,8 @@ class JobService:
                 filename=filename,
                 puid=puid,
                 mime_type=mime_type,
+                object_identifier=object_identifier,
+                object_identifier_type=object_identifier_type,
                 request_id=request_id,
             )
         except ToolNotConfigured as exc:

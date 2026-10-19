@@ -72,11 +72,31 @@ class SubmitAndFetchTests(JobsViewTestCase):
         for body in (sync, async_body):
             body.pop("request_id")
             body["provenance"].pop("timestamp")
+            event = body["provenance"]["event"]
+            event.pop("eventDateTime")
+            event.pop("eventIdentifier")  # both differ per request
             for item in body["results"]:
                 item.pop("started_at")
                 item.pop("finished_at")
                 item.pop("command")  # names the per-request temp file
         self.assertEqual(async_body, sync)
+
+    def test_async_result_carries_the_object_identifier_like_the_sync_result(self, _run):
+        ids = {"object_identifier": "u-1", "object_identifier_type": "UUID"}
+        job_id = self.submit(**ids).json()["job_id"]
+        link = self.client.get(f"{SUBMIT}{job_id}/result/").json()["provenance"]["event"][
+            "linkingObjectIdentifier"
+        ]
+        sync = self.client.post(
+            "/api/v1/extract/",
+            {"file": _upload(), "mime_type": "image/jpeg", **ids},
+            format="multipart",
+        ).json()["provenance"]["event"]["linkingObjectIdentifier"]
+        self.assertEqual(link, sync)
+        self.assertEqual(link[0]["linkingObjectIdentifierValue"], "u-1")
+
+    def test_one_object_identifier_field_is_a_400(self, _run):
+        self.assertEqual(self.submit(object_identifier="u-1").status_code, 400)
 
     def test_result_as_xml(self, _run):
         job_id = self.submit().json()["job_id"]

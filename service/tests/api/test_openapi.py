@@ -28,7 +28,7 @@ class OpenAPITests(TestCase):
     def test_extract_operation_describes_request_and_responses(self):
         operation = self._schema()["paths"]["/api/v1/extract/"]["post"]
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type"})
+        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type", "object_identifier", "object_identifier_type"})
         self.assertEqual(form["required"], ["file"])
         self.assertEqual(set(operation["responses"]), {"200", "400", "413", "500", "503"})
         ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
@@ -40,7 +40,7 @@ class OpenAPITests(TestCase):
         self.assertEqual(set(submit["responses"]), {"202", "400", "404", "413", "500", "503"})
         self.assertIn("Location", submit["responses"]["202"]["headers"])
         form = submit["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type"})
+        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type", "object_identifier", "object_identifier_type"})
         status = paths["/api/v1/jobs/{job_id}/"]["get"]
         self.assertEqual(set(status["responses"]), {"200", "404"})
         result = paths["/api/v1/jobs/{job_id}/result/"]["get"]

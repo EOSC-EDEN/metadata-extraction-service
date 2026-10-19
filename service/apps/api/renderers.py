@@ -14,12 +14,36 @@ from rest_framework.renderers import BaseRenderer
 
 NAMESPACE = "urn:eden:mes:result:1"
 JOB_NAMESPACE = "urn:eden:mes:job:1"
+PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
 
 _INVALID_XML_CHARS = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
 
 
 def _q(name):
     return f"{{{NAMESPACE}}}{name}"
+
+
+def _premis(name):
+    return f"{{{PREMIS_NAMESPACE}}}{name}"
+
+
+def _premis_element(parent, name, value):
+    """Append the PREMIS dict/list/str `value` as <premis:name>, element names taken from the dict keys.
+
+    PREMIS text elements are plain strings that allow no attributes, so the base64 marker of
+    `_set_text` would make the document invalid: characters XML cannot carry are replaced with
+    U+FFFD here (the unmodified text stays in the `errors`/`warnings` lists, which are encoded).
+    """
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _premis_element(parent, name, item)
+        return
+    element = ET.SubElement(parent, _premis(name))
+    if isinstance(value, dict):
+        for key, member in value.items():
+            _premis_element(element, key, member)
+    else:
+        element.text = _INVALID_XML_CHARS.sub("\ufffd", str(value))
 
 
 def _set_text(element, value):
@@ -48,6 +72,21 @@ def _text_list(parent, name, values):
     for value in values:
         _text(container, "item", value, encoded=True)
     return container
+
+
+def _error_lists(parent, data):
+    """errors, then the optional errorCategories and errorDetails (absent in older producers)."""
+    _text_list(parent, "errors", data["errors"])
+    if "error_categories" in data:
+        categories = ET.SubElement(parent, _q("errorCategories"))
+        for category in data["error_categories"]:
+            _text(categories, "item", category)
+    if "error_details" in data:
+        details = ET.SubElement(parent, _q("errorDetails"))
+        for detail in data["error_details"]:
+            item = ET.SubElement(details, _q("errorDetail"))
+            _text(item, "message", detail["message"], encoded=True)
+            _text(item, "category", detail["category"])
 
 
 def _json_value(parent, name, value):
@@ -103,7 +142,7 @@ def build_result_element(data: dict) -> ET.Element:
             _text_list(item, "command", result["command"])
         _text(item, "rawOutput", result["raw_output"], encoded=True)
         _text(item, "rawOutputFormat", result["raw_output_format"])
-        _text_list(item, "errors", result["errors"])
+        _error_lists(item, result)
         _text_list(item, "warnings", result["warnings"])
 
     provenance = data["provenance"]
@@ -115,10 +154,13 @@ def build_result_element(data: dict) -> ET.Element:
         if version is not None:
             node = _text(versions_el, "toolVersion", version)
             _set_text_attr(node, "tool", tool)
+    _premis_element(prov_el, "event", provenance["event"])
+    for agent in provenance["agents"]:
+        _premis_element(prov_el, "agent", agent)
     if provenance["ffis"] is not None:
         _json_value(prov_el, "ffis", provenance["ffis"])
 
-    _text_list(root, "errors", data["errors"])
+    _error_lists(root, data)
     _text_list(root, "warnings", data["warnings"])
     return root
 
@@ -152,6 +194,7 @@ class MESXMLRenderer(BaseRenderer):
             # Error payloads ({"errors": [...]}, DRF field errors) have no result schema.
             return self._render_error(data)
         ET.register_namespace("", NAMESPACE)
+        ET.register_namespace("premis", PREMIS_NAMESPACE)
         return ET.tostring(build_result_element(data), encoding="utf-8", xml_declaration=True)
 
     @staticmethod

@@ -84,6 +84,16 @@ class ExtractAutoSchema(AutoSchema):
                                 "maxLength": 255,
                                 "description": "Optional MIME type of the file. If given, format identification is not called.",
                             },
+                            "object_identifier": {
+                                "type": "string",
+                                "maxLength": 255,
+                                "description": "Optional identifier of the file's own PREMIS object (for example its path in the SIP). Echoed in the extraction event's `linkingObjectIdentifier`; must be given together with `object_identifier_type`. Without both, the event links the uploaded filename.",
+                            },
+                            "object_identifier_type": {
+                                "type": "string",
+                                "maxLength": 64,
+                                "description": "Type of `object_identifier` (for example `filename` or `sip-path`). Must be given together with `object_identifier`.",
+                            },
                         },
                     }
                 }

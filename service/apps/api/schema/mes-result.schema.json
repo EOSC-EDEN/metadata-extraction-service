@@ -46,6 +46,21 @@
           },
           "raw_output_format": {"type": ["string", "null"]},
           "errors": {"type": "array", "items": {"type": "string"}},
+          "error_categories": {
+            "description": "Category of each error, aligned by index with errors. Omitted by older producers.",
+            "type": "array",
+            "items": {"enum": ["encrypted", "truncated_or_broken", "wrong_format", "unknown"]}
+          },
+          "error_details": {
+            "description": "The errors as {message, category} objects; the preferred field for new callers.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["message", "category"],
+              "properties": {"message": {"type": "string"}, "category": {"enum": ["encrypted", "truncated_or_broken", "wrong_format", "unknown"]}}
+            }
+          },
           "warnings": {"type": "array", "items": {"type": "string"}}
         }
       }
@@ -53,13 +68,113 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["timestamp", "service_version", "tool_versions", "ffis"],
+      "required": ["timestamp", "service_version", "tool_versions", "event", "agents", "ffis"],
       "properties": {
         "timestamp": {"type": "string", "format": "date-time"},
         "service_version": {"type": "string"},
         "tool_versions": {
           "type": "object",
           "additionalProperties": {"type": ["string", "null"]}
+        },
+        "event": {
+          "description": "The PREMIS 3.0 `metadata extraction` event for this request. Element names mirror PREMIS (camelCase) on purpose, so it can be copied into a PREMIS record.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventIdentifier", "eventType", "eventDateTime"],
+          "properties": {
+            "eventIdentifier": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["eventIdentifierType", "eventIdentifierValue"],
+              "properties": {
+                "eventIdentifierType": {"type": "string"},
+                "eventIdentifierValue": {"type": "string"}
+              }
+            },
+            "eventType": {"type": "string"},
+            "eventDateTime": {"type": "string", "format": "date-time"},
+            "eventDetailInformation": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {"eventDetail": {"type": "string"}}
+              }
+            },
+            "eventOutcomeInformation": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["eventOutcome"],
+                "properties": {
+                  "eventOutcome": {"enum": ["success", "warning", "fail"]},
+                  "eventOutcomeDetail": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["eventOutcomeDetailNote"],
+                      "properties": {"eventOutcomeDetailNote": {"type": "string"}}
+                    }
+                  }
+                }
+              }
+            },
+            "linkingAgentIdentifier": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["linkingAgentIdentifierType", "linkingAgentIdentifierValue"],
+                "properties": {
+                  "linkingAgentIdentifierType": {"type": "string"},
+                  "linkingAgentIdentifierValue": {"type": "string"},
+                  "linkingAgentRole": {"type": "array", "items": {"type": "string"}}
+                }
+              }
+            },
+            "linkingObjectIdentifier": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["linkingObjectIdentifierType", "linkingObjectIdentifierValue"],
+                "properties": {
+                  "linkingObjectIdentifierType": {"type": "string"},
+                  "linkingObjectIdentifierValue": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "agents": {
+          "description": "The PREMIS agents the event links to: the MES service and one per tool that ran.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["agentIdentifier"],
+            "properties": {
+              "agentIdentifier": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["agentIdentifierType", "agentIdentifierValue"],
+                  "properties": {
+                    "agentIdentifierType": {"type": "string"},
+                    "agentIdentifierValue": {"type": "string"}
+                  }
+                }
+              },
+              "agentName": {"type": "array", "items": {"type": "string"}},
+              "agentType": {"type": "string"},
+              "agentVersion": {"type": "string"}
+            }
+          }
         },
         "ffis": {
           "description": "FFIS's own provenance block, passed through; null when FFIS was not used.",
@@ -68,6 +183,21 @@
       }
     },
     "errors": {"type": "array", "items": {"type": "string"}},
+    "error_categories": {
+      "description": "Category of each error, aligned by index with errors. Omitted by older producers.",
+      "type": "array",
+      "items": {"enum": ["encrypted", "truncated_or_broken", "wrong_format", "unknown"]}
+    },
+    "error_details": {
+      "description": "The errors as {message, category} objects; the preferred field for new callers.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message", "category"],
+        "properties": {"message": {"type": "string"}, "category": {"enum": ["encrypted", "truncated_or_broken", "wrong_format", "unknown"]}}
+      }
+    },
     "warnings": {"type": "array", "items": {"type": "string"}}
   }
 }

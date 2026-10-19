@@ -89,7 +89,13 @@ class ExtractMetadataView(RequestIdMixin, APIView):
             metrics.record_tool_results(result.results)
             outcome = metrics.classify_outcome(result)
             return Response(
-                serialize_extraction_result(result, request.mes_request_id, upload.name)
+                serialize_extraction_result(
+                    result,
+                    request.mes_request_id,
+                    upload.name,
+                    object_identifier=data.get("object_identifier") or None,
+                    object_identifier_type=data.get("object_identifier_type") or None,
+                )
             )
         finally:
             metrics.record_request(outcome, time.perf_counter() - started)
@@ -133,6 +139,8 @@ class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
                 filename=upload.name,
                 puid=data.get("puid") or None,
                 mime_type=data.get("mime_type") or None,
+                object_identifier=data.get("object_identifier") or None,
+                object_identifier_type=data.get("object_identifier_type") or None,
                 request_id=request.mes_request_id,
                 size_bytes=upload.size,
             )

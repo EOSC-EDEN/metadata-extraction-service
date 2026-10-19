@@ -27,6 +27,13 @@ class UiTests(SimpleTestCase):
         self.assertIn('id="puid-input"', html)
         self.assertIn('id="mime-input"', html)
 
+    def test_page_has_object_identifier_inputs_and_event_section(self):
+        html = b"".join(self.client.get("/").streaming_content).decode()
+        for element_id in ("object-id-input", "object-id-type-input", "event-section", "event-body"):
+            self.assertIn(f'id="{element_id}"', html, element_id)
+        self.assertIn("'object_identifier'", html)
+        self.assertIn("'object_identifier_type'", html)
+
     def test_page_has_service_info_panel(self):
         html = b"".join(self.client.get("/").streaming_content).decode()
         for element_id in ("info-panel", "limit-text", "tool-chips"):

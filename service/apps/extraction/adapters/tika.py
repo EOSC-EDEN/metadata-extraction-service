@@ -1,4 +1,4 @@
-from .base import HTTPToolAdapter
+from .base import ErrorCategory, HTTPToolAdapter
 
 _CHUNK_SIZE = 64 * 1024
 
@@ -15,6 +15,11 @@ class TikaAdapter(HTTPToolAdapter):
 
     tool_name = "tika"
     raw_output_format = "json"
+    error_patterns = {
+        ErrorCategory.ENCRYPTED: ("encrypt", "password"),
+        ErrorCategory.WRONG_FORMAT: ("415 client error", "unsupported media type"),
+        ErrorCategory.TRUNCATED_OR_BROKEN: ("truncated", "corrupt", "unexpected end"),
+    }
 
     def build_request(self, file_path) -> dict:
         return {

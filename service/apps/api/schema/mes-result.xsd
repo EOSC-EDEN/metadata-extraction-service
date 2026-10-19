@@ -7,8 +7,12 @@
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns="urn:eden:mes:result:1"
+           xmlns:premis="http://www.loc.gov/premis/v3"
            targetNamespace="urn:eden:mes:result:1"
            elementFormDefault="qualified">
+
+  <!-- provenance carries one PREMIS 3.0 event and the agents it links to. -->
+  <xs:import namespace="http://www.loc.gov/premis/v3" schemaLocation="premis.xsd"/>
 
   <xs:complexType name="textType">
     <xs:simpleContent>
@@ -62,6 +66,35 @@
     </xs:choice>
   </xs:complexType>
 
+  <xs:simpleType name="errorCategoryType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="encrypted"/>
+      <xs:enumeration value="truncated_or_broken"/>
+      <xs:enumeration value="wrong_format"/>
+      <xs:enumeration value="unknown"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Categories aligned by index with errors; optional so older documents stay valid. -->
+  <xs:complexType name="errorCategoryListType">
+    <xs:sequence>
+      <xs:element name="item" type="errorCategoryType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="errorDetailListType">
+    <xs:sequence>
+      <xs:element name="errorDetail" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="message" type="textType"/>
+            <xs:element name="category" type="errorCategoryType"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
   <xs:element name="extractionResult">
     <xs:complexType>
       <xs:sequence>
@@ -101,6 +134,8 @@
                     <xs:element name="rawOutput" type="textType" minOccurs="0"/>
                     <xs:element name="rawOutputFormat" type="xs:string" minOccurs="0"/>
                     <xs:element name="errors" type="textListType"/>
+                    <xs:element name="errorCategories" type="errorCategoryListType" minOccurs="0"/>
+                    <xs:element name="errorDetails" type="errorDetailListType" minOccurs="0"/>
                     <xs:element name="warnings" type="textListType"/>
                   </xs:sequence>
                 </xs:complexType>
@@ -128,11 +163,15 @@
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
+              <xs:element ref="premis:event"/>
+              <xs:element ref="premis:agent" maxOccurs="unbounded"/>
               <xs:element name="ffis" type="valueType" minOccurs="0"/>
             </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element name="errors" type="textListType"/>
+        <xs:element name="errorCategories" type="errorCategoryListType" minOccurs="0"/>
+        <xs:element name="errorDetails" type="errorDetailListType" minOccurs="0"/>
         <xs:element name="warnings" type="textListType"/>
       </xs:sequence>
     </xs:complexType>

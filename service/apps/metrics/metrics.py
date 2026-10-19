@@ -11,7 +11,7 @@ from prometheus_client import Counter, Histogram
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 
-from apps.extraction.adapters.base import ToolExecutionStatus
+from apps.extraction.services.orchestrator import classify_statuses
 
 logger = logging.getLogger(__name__)
 
@@ -96,21 +96,12 @@ def record_tool_results(results) -> None:
         )
 
 
-def _classify(statuses, has_errors: bool) -> str:
-    succeeded = [s for s in statuses if s == ToolExecutionStatus.SUCCESS.value]
-    if not succeeded:
-        return "failed"
-    if len(succeeded) == len(statuses) and not has_errors:
-        return "success"
-    return "partial"
-
-
 def classify_outcome(result) -> str:
     """success: every tool succeeded; failed: none did; partial: anything in between."""
-    return _classify([r.status.value for r in result.results], bool(result.errors))
+    return result.outcome
 
 
 def classify_serialized_outcome(payload: dict) -> str:
     """`classify_outcome` for a serialised result (the `mes-result` document)."""
     statuses = [r["status"] for r in payload.get("results", [])]
-    return _classify(statuses, bool(payload.get("errors")))
+    return classify_statuses(statuses, bool(payload.get("errors")))

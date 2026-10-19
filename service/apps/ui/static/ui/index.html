@@ -331,6 +331,12 @@
     <label>MIME type (optional)
       <input type="text" id="mime-input" placeholder="e.g. image/jpeg" autocomplete="off" />
     </label>
+    <label>Object identifier (optional)
+      <input type="text" id="object-id-input" placeholder="e.g. test.txt or SIP::2026-001/content/test.txt" maxlength="255" autocomplete="off" />
+    </label>
+    <label>Object identifier type (optional)
+      <input type="text" id="object-id-type-input" placeholder="e.g. filename or sip-path" maxlength="64" autocomplete="off" />
+    </label>
     <label class="async-option" style="display:none">
       <input type="checkbox" id="async-checkbox" />
       Process asynchronously (submit a job and wait for it to finish)
@@ -388,6 +394,11 @@
       <div class="card-body" id="tool-breakdown"></div>
     </div>
 
+    <details id="event-section" class="card" style="display:none">
+      <summary class="card-header">📜 Event</summary>
+      <div class="card-body" id="event-body"></div>
+    </details>
+
   </div>
 
   <div id="try-again">
@@ -412,6 +423,8 @@
   const optionsDiv = document.getElementById('options');
   const puidInput  = document.getElementById('puid-input');
   const mimeInput  = document.getElementById('mime-input');
+  const objectIdInput     = document.getElementById('object-id-input');
+  const objectIdTypeInput = document.getElementById('object-id-type-input');
   const asyncCheckbox = document.getElementById('async-checkbox');
   const spinnerText   = document.getElementById('spinner-text');
   const infoPanel  = document.getElementById('info-panel');
@@ -562,6 +575,8 @@
     form.append('file', file);
     if (puidInput.value.trim()) form.append('puid', puidInput.value.trim());
     if (mimeInput.value.trim()) form.append('mime_type', mimeInput.value.trim());
+    if (objectIdInput.value.trim()) form.append('object_identifier', objectIdInput.value.trim());
+    if (objectIdTypeInput.value.trim()) form.append('object_identifier_type', objectIdTypeInput.value.trim());
 
     try {
       const data = asyncCheckbox.checked
@@ -648,7 +663,7 @@
        <span><b>Request:</b> <span style="font-family:monospace;font-size:.82rem">${esc(d.request_id)}</span></span>`;
 
     // ── Errors and warnings ──────────────────────────────────────────────────
-    fillList('errors-card', 'errors-body', errors, 'error-item');
+    fillList('errors-card', 'errors-body', errorLabels(d), 'error-item');
     fillList('warnings-card', 'warnings-body', warnings, 'warning-item');
 
     // ── Tool breakdown — aligned table + raw output ─────────────────────────
@@ -679,7 +694,7 @@
                 : r.status === 'timeout' ? 'badge-warning' : 'badge-failure';
       td1.innerHTML = `<span class="badge ${cls}">${esc(r.status)}</span>`
         + (r.errors?.length
-            ? `<small style="color:#c00">${r.errors.map(esc).join('<br>')}</small>` : '')
+            ? `<small style="color:#c00">${errorLabels(r).map(esc).join('<br>')}</small>` : '')
         + (r.warnings?.length
             ? `<small>${r.warnings.map(esc).join('<br>')}</small>` : '');
 
@@ -695,8 +710,38 @@
     });
 
     tb.appendChild(table);
+    renderEvent(d.provenance || {});
 
     resultDiv.style.display = 'block';
+  }
+
+  // The PREMIS extraction event and its agents (provenance.event / provenance.agents), all escaped.
+  function renderEvent(prov) {
+    const box = document.getElementById('event-section');
+    const ev = prov.event;
+    if (!ev) { box.style.display = 'none'; return; }
+    const outcome = (ev.eventOutcomeInformation || [])[0] || {};
+    const notes = (outcome.eventOutcomeDetail || []).map(n => n.eventOutcomeDetailNote);
+    const agents = (prov.agents || []).map(a => {
+      const id = (a.agentIdentifier || [])[0] || {};
+      return `${(a.agentName || [id.agentIdentifierValue]).join(', ')}${a.agentVersion ? ' ' + a.agentVersion : ''}`;
+    });
+    const object = (ev.linkingObjectIdentifier || [])[0] || {};
+    document.getElementById('event-body').innerHTML =
+      `<div><b>Type</b> ${esc(ev.eventType)}</div>` +
+      `<div><b>Date and time</b> ${esc(ev.eventDateTime)}</div>` +
+      `<div><b>Outcome</b> ${esc(outcome.eventOutcome)}</div>` +
+      `<div><b>Object</b> ${esc(object.linkingObjectIdentifierType)}: ${esc(object.linkingObjectIdentifierValue)}</div>` +
+      (notes.length ? `<div><b>Notes</b>${notes.map(n => `<div>${esc(n)}</div>`).join('')}</div>` : '') +
+      (agents.length ? `<div><b>Agents</b>${agents.map(a => `<div>${esc(a)}</div>`).join('')}</div>` : '');
+    box.style.display = 'block';
+  }
+
+  // "[category] message" for categorised errors; "unknown" and old responses show the bare message.
+  function errorLabels(obj) {
+    const details = obj.error_details;
+    if (!details) return obj.errors || [];
+    return details.map(e => e.category && e.category !== 'unknown' ? `[${e.category}] ${e.message}` : e.message);
   }
 
   function fillList(cardId, bodyId, items, itemClass) {

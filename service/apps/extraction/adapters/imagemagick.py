@@ -1,4 +1,4 @@
-from .base import SubprocessToolAdapter
+from .base import ErrorCategory, SubprocessToolAdapter
 
 
 class ImageMagickAdapter(SubprocessToolAdapter):
@@ -11,6 +11,11 @@ class ImageMagickAdapter(SubprocessToolAdapter):
     tool_name = "imagemagick"
     invocation_command = "identify"
     raw_output_format = "text"
+    error_patterns = {
+        ErrorCategory.ENCRYPTED: ("password", "encrypt"),
+        ErrorCategory.WRONG_FORMAT: ("no decode delegate", "improper image header", "unrecognized image format", "not a supported image"),
+        ErrorCategory.TRUNCATED_OR_BROKEN: ("corrupt image", "insufficient image data", "premature end", "unexpected end", "truncated"),
+    }
 
     def build_command(self, file_path) -> list[str]:
         return [self.invocation_command, *self.extra_args, "-verbose", str(file_path)]

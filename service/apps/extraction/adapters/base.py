@@ -22,6 +22,21 @@ class ToolExecutionStatus(str, Enum):
     TIMEOUT = "timeout"
 
 
+class ErrorCategory:
+    """MES's own error vocabulary (CPP-009 Step 3 names these issues as examples, no fixed set)."""
+
+    ENCRYPTED = "encrypted"
+    TRUNCATED_OR_BROKEN = "truncated_or_broken"
+    WRONG_FORMAT = "wrong_format"
+    UNKNOWN = "unknown"  # the default, always valid
+
+
+@dataclass(frozen=True)
+class ErrorDetail:
+    message: str
+    category: str = ErrorCategory.UNKNOWN
+
+
 @dataclass(frozen=True)
 class ToolInvocationResult:
     tool_name: str
@@ -32,8 +47,13 @@ class ToolInvocationResult:
     started_at: datetime
     finished_at: datetime
     command: tuple[str, ...] | None
-    errors: list[str] = field(default_factory=list)
+    #: The one source of truth for errors; `errors` and the categories derive from it.
+    error_details: tuple[ErrorDetail, ...] = ()
     warnings: list[str] = field(default_factory=list)
+
+    @property
+    def errors(self) -> list[str]:
+        return [detail.message for detail in self.error_details]
 
 
 class BaseToolAdapter(ABC):
@@ -63,6 +83,26 @@ class BaseToolAdapter(ABC):
     def get_tool_version(self) -> str | None:
         return None
 
+    #: Per-tool, lowercase message fragments by category; first matching category wins
+    #: (dict order). Tools share no error vocabulary, so matching is heuristic.
+    error_patterns: dict[str, tuple[str, ...]] = {}
+
+    def classify_error(self, message: str) -> str:
+        """Map a tool error message to an `ErrorCategory`; `unknown` when nothing matches.
+
+        Adapters normally just set `error_patterns`; override for anything more involved.
+        """
+        for category, patterns in self.error_patterns.items():
+            if _matches(message, patterns):
+                return category
+        return ErrorCategory.UNKNOWN
+
+    def _safe_classify(self, message: str) -> str:
+        try:
+            return self.classify_error(message)
+        except Exception:  # a buggy hook must never break run()
+            return ErrorCategory.UNKNOWN
+
     def run(self, file_path) -> ToolInvocationResult:
         started_at = datetime.now(timezone.utc)
         raw_output: str | None = None
@@ -81,6 +121,7 @@ class BaseToolAdapter(ABC):
             status = ToolExecutionStatus.FAILURE
             errors = [f"{type(exc).__name__}: {exc}"]
         finished_at = datetime.now(timezone.utc)
+        error_details = tuple(ErrorDetail(m, self._safe_classify(m)) for m in errors)
         return ToolInvocationResult(
             tool_name=self.tool_name,
             tool_version=self.get_tool_version(),
@@ -90,9 +131,14 @@ class BaseToolAdapter(ABC):
             started_at=started_at,
             finished_at=finished_at,
             command=self._last_command,
-            errors=errors,
+            error_details=error_details,
             warnings=list(self._last_warnings),
         )
+
+
+def _matches(message: str, patterns: tuple[str, ...]) -> bool:
+    lowered = message.lower()
+    return any(pattern in lowered for pattern in patterns)
 
 
 def _describe_failure(exc: Exception) -> str:
