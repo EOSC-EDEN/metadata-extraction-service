@@ -18,6 +18,7 @@ from apps.api.openapi import (
     JobStatusAutoSchema,
     JobSubmitAutoSchema,
     LimitsAutoSchema,
+    LocalRulesAutoSchema,
     ToolsAutoSchema,
 )
 from apps.api.serializers import (
@@ -29,6 +30,7 @@ from apps.api.serializers import (
 )
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
 from apps.extraction.tool_config import list_tool_configs
+from apps.extraction.tool_rules import load_tool_rules
 from apps.metrics import metrics
 
 
@@ -84,6 +86,7 @@ class ExtractMetadataView(RequestIdMixin, APIView):
                     puid=data.get("puid") or None,
                     mime_type=data.get("mime_type") or None,
                     request_id=request.mes_request_id,
+                    filename=upload.name,
                 )
 
             metrics.record_tool_results(result.results)
@@ -208,6 +211,25 @@ class ToolsView(APIView):
             for tool in list_tool_configs()
         ]
         return Response({"tools": tools})
+
+
+class LocalRulesView(APIView):
+    """GET /api/v1/local-rules/ — the local format rules that link PUIDs/extensions to tools."""
+
+    schema = LocalRulesAutoSchema()
+
+    def get(self, request):
+        rules = [
+            {
+                "name": rule.name,
+                "puids": list(rule.puids),
+                "extensions": list(rule.extensions),
+                "tools": list(rule.tools),
+                "match": rule.match,
+            }
+            for rule in load_tool_rules()
+        ]
+        return Response({"rules": rules})
 
 
 class LimitsView(APIView):

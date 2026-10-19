@@ -41,6 +41,8 @@ class AggregatedExtractionResult:
     #: FFIS's per-engine provenance, present only when FFIS identified the file.
     ffis_provenance: dict | None = None
     identification_url: str | None = None
+    #: Local format rules that selected the tools (empty unless selection_method is local_rule*).
+    matched_rules: tuple[str, ...] = ()
 
     @property
     def errors(self) -> list[str]:
@@ -67,9 +69,11 @@ class ExtractionOrchestrator:
         self.ffis_client = ffis_client
 
     def extract(
-        self, file_path, puid=None, mime_type=None, request_id=None
+        self, file_path, puid=None, mime_type=None, request_id=None, filename=None
     ) -> AggregatedExtractionResult:
-        resolution = resolve_tools(file_path, puid, mime_type, ffis_client=self.ffis_client)
+        resolution = resolve_tools(
+            file_path, puid, mime_type, ffis_client=self.ffis_client, filename=filename
+        )
         result = self._run(resolution.tools, resolution.selection_method, file_path, resolution)
         _log_outcome(result, request_id)
         return result
@@ -91,6 +95,7 @@ class ExtractionOrchestrator:
             mime_type=resolution.mime_type if resolution else None,
             ffis_provenance=resolution.ffis_provenance if resolution else None,
             identification_url=resolution.identification_url if resolution else None,
+            matched_rules=tuple(resolution.matched_rules) if resolution else (),
         )
 
     def _invoke_tools(self, tools, file_path) -> list[ToolInvocationResult]:

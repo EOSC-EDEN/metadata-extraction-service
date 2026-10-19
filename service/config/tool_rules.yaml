@@ -1,0 +1,16 @@
+# Local format rules: link file formats to extraction tools without the external Format Library.
+# Read from MES_TOOL_RULES_FILE (default: config/tool_rules.yaml); a missing file means no rules.
+# Validated at startup; restart is not needed to change rules, the file is re-read when it changes.
+#
+# A rule matches on its PUID OR its extension (match: any, the default), or on both (match: all).
+# When at least one rule matches, only the tools of ALL matching rules (de-duplicated) plus the
+# default tool (MES_DEFAULT_TOOL) run. When no rule matches, tool selection is unchanged.
+# Tool names must exist in MES_TOOLS; a rule naming a disabled tool skips it with a warning.
+#
+# rules:
+#   - name: flac-audio          # unique
+#     puids: [fmt/279]          # PRONOM identifiers (case-insensitive)
+#     extensions: [flac]        # case-insensitive, leading dot optional
+#     tools: [metaflac]
+#     # match: any              # or "all" (needs both puids and extensions)
+rules: []

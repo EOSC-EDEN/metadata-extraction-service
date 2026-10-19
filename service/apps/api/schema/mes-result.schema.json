@@ -21,6 +21,11 @@
         "identification_url": {
           "description": "Base URL of the format identification service (FFIS) consulted for this request; null when it was not called.",
           "type": ["string", "null"]
+        },
+        "matched_rules": {
+          "description": "Names of the local format rules that selected the tools (selection_method local_rule or local_rule_via_ffis); empty otherwise.",
+          "type": "array",
+          "items": {"type": "string"}
         }
       }
     },
@@ -175,6 +180,11 @@
               "agentVersion": {"type": "string"}
             }
           }
+        },
+        "matched_rules": {
+          "description": "Same as tool_resolution.matched_rules, repeated here so the provenance block is self-contained.",
+          "type": "array",
+          "items": {"type": "string"}
         },
         "ffis": {
           "description": "FFIS's own provenance block, passed through; null when FFIS was not used.",

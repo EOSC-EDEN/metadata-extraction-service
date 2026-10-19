@@ -25,6 +25,17 @@ class OpenAPITests(TestCase):
         ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
         self.assertEqual(set(ok["required"]), {"max_upload_bytes", "async_enabled"})
 
+    def test_local_rules_endpoint_is_listed(self):
+        operation = self._schema()["paths"]["/api/v1/local-rules/"]["get"]
+        ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        self.assertEqual(ok["required"], ["rules"])
+        schema = self._schema()
+        self.assertEqual(ok["properties"]["rules"]["items"], {"$ref": "#/components/schemas/LocalRule"})
+        self.assertEqual(
+            set(schema["components"]["schemas"]["LocalRule"]["required"]),
+            {"name", "puids", "extensions", "tools", "match"},
+        )
+
     def test_extract_operation_describes_request_and_responses(self):
         operation = self._schema()["paths"]["/api/v1/extract/"]["post"]
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]

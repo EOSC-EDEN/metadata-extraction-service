@@ -54,7 +54,7 @@ def _extract_and_serialize(
     *, file_path, filename, puid, mime_type, object_identifier, object_identifier_type, request_id
 ) -> dict:
     result = ExtractionOrchestrator().extract(
-        file_path, puid=puid, mime_type=mime_type, request_id=request_id
+        file_path, puid=puid, mime_type=mime_type, request_id=request_id, filename=filename
     )
     metrics.record_tool_results(result.results)
     return serialize_extraction_result(

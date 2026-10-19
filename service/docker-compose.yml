@@ -6,6 +6,7 @@ x-mes-environment: &mes-environment
   # Point at a running FFIS instance (e.g. http://host.docker.internal:8001).
   MES_FFIS_BASE_URL: ${MES_FFIS_BASE_URL:-}
   MES_FFIS_TIMEOUT_SECONDS: ${MES_FFIS_TIMEOUT_SECONDS:-30}
+  MES_TOOL_RULES_FILE: ${MES_TOOL_RULES_FILE:-config/tool_rules.yaml}
   MES_MAX_UPLOAD_BYTES: ${MES_MAX_UPLOAD_BYTES:-536870912}
   MES_MAX_CONCURRENT_TOOLS: ${MES_MAX_CONCURRENT_TOOLS:-4}
   MES_ASYNC_ENABLED: ${MES_ASYNC_ENABLED:-true}
@@ -46,6 +47,8 @@ services:
     volumes:
       # Uploads while they are processed. Replace with a bind mount if you prefer.
       - mes-uploads:/var/lib/mes/uploads
+      # Local format rules (edit config/tool_rules.yaml; no rebuild needed).
+      - ./config:/app/config:ro
     restart: unless-stopped
 
   # Redis job store: `docker compose --profile redis up` with MES_JOB_STORE=redis.
@@ -68,6 +71,7 @@ services:
     environment: *mes-environment
     volumes:
       - mes-uploads:/var/lib/mes/uploads
+      - ./config:/app/config:ro
     healthcheck:
       disable: true
     depends_on:

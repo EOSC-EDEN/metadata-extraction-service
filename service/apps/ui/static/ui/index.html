@@ -473,6 +473,8 @@
     default_tool_ffis_disabled:      'No format supplied · default tool used',
     default_tool_ffis_inconclusive:  'Format could not be identified · default tool used',
     default_tool_ffis_unreachable:   'Format identification unavailable · default tool used',
+    local_rule:                      'Tools selected by local format rule',
+    local_rule_via_ffis:             'Format identified automatically · tools selected by local format rule',
   };
 
   const OUTCOME_DESC = {
@@ -619,7 +621,9 @@
     document.getElementById('format-name').textContent =
       res.mime_type || res.puid || 'Format not identified';
     document.getElementById('format-sub').textContent =
-      [SELECTION_DESC[res.selection_method] || res.selection_method, OUTCOME_DESC[outcome]]
+      [(SELECTION_DESC[res.selection_method] || res.selection_method) +
+         ((res.matched_rules || []).length ? ` (${res.matched_rules.join(', ')})` : ''),
+       OUTCOME_DESC[outcome]]
         .filter(Boolean).join(' · ');
 
     // ── Identification service ──────────────────────────────────────────────

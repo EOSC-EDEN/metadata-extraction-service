@@ -135,6 +135,7 @@ def serialize_extraction_result(
             "resolved_tools": list(result.resolved_tools),
             "selection_method": result.selection_method,
             "identification_url": result.identification_url,
+            "matched_rules": list(result.matched_rules),
         },
         "results": [_serialize_tool_result(r) for r in result.results],
         "provenance": {
@@ -150,6 +151,7 @@ def serialize_extraction_result(
                 object_identifier_type=object_identifier_type,
             ),
             "agents": premis.build_agents(result, service_version=SERVICE_VERSION),
+            "matched_rules": list(result.matched_rules),
             "ffis": result.ffis_provenance,
         },
         **_error_fields(result.error_details),

@@ -11,6 +11,7 @@ from apps.api.views import (
     JobStatusView,
     JobSubmitView,
     LimitsView,
+    LocalRulesView,
     ToolsView,
 )
 
@@ -32,6 +33,7 @@ urlpatterns = [
     path("jobs/<str:job_id>/result/", JobResultView.as_view(), name="job-result"),
     path("tools/", ToolsView.as_view(), name="tools"),
     path("limits/", LimitsView.as_view(), name="limits"),
+    path("local-rules/", LocalRulesView.as_view(), name="local-rules"),
     path(
         "schema/",
         get_schema_view(
@@ -46,6 +48,7 @@ urlpatterns = [
                 path("jobs/<str:job_id>/result/", JobResultView.as_view()),
                 path("tools/", ToolsView.as_view()),
                 path("limits/", LimitsView.as_view()),
+                path("local-rules/", LocalRulesView.as_view()),
             ],
         ),
         name="openapi-schema",

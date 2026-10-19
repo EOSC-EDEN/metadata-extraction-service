@@ -205,6 +205,10 @@ MES_TOOLS = {
 # Tool run when no format mapping selects one (MES-REQ-1-001).
 MES_DEFAULT_TOOL = os.environ.get("MES_DEFAULT_TOOL", "exiftool")
 
+# YAML file linking PUIDs and/or file extensions to extraction tools (see config/tool_rules.yaml).
+# A relative path is resolved against the project directory; a missing file means no rules.
+MES_TOOL_RULES_FILE = os.environ.get("MES_TOOL_RULES_FILE", "config/tool_rules.yaml")
+
 # Bound on concurrent tool invocations within ONE extraction request (a positive
 # integer, validated at startup). Worst-case simultaneous tool processes are
 # gunicorn workers x this value, so size it against the container's CPU/memory,

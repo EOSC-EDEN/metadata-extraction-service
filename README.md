@@ -32,6 +32,7 @@ The service generates its OpenAPI 3 description with Django REST framework's bui
 | `GET /api/v1/jobs/{job_id}/` | Job envelope; `status` is `pending`, `running`, `succeeded` or `failed` (`errors` is filled when failed). `404` for an unknown or expired job. |
 | `GET /api/v1/jobs/{job_id}/result/` | Exactly the `/extract/` result (JSON, or XML via `Accept`) once the job succeeded. `409` while unfinished or if the job failed; `404` for an unknown or expired job. |
 | `GET /api/v1/limits/` | Deployment limits and features for the UI: `max_upload_bytes`, `async_enabled`. |
+| `GET /api/v1/local-rules/` | The local format rules (see "Local format rules"): `rules` with `name`, `puids`, `extensions`, `tools`, `match` for each, normalised, in file order; `[]` when none are configured. |
 | `GET /api/v1/tools/` | List the tools configured for metadata extraction (name, kind, enabled, mandatory, default, timeout). Invocation details are not exposed. |
 | `GET /api/v1/schema/` | OpenAPI 3 schema (YAML by default; send `Accept: application/vnd.oai.openapi+json` for JSON). |
 | `GET /api/v1/docs/` | Browsable Swagger UI (loads a pinned `swagger-ui-dist` from a CDN). |
@@ -103,6 +104,7 @@ scrape_configs:
 |---|---|---|
 | `MES_MAX_UPLOAD_BYTES` | `536870912` (512 MiB) | Largest accepted upload. Larger files get HTTP `413` and no tool runs. |
 | `MES_MAX_CONCURRENT_TOOLS` | `4` | Tools run concurrently within one request (integer ≥ 1; invalid values stop startup). Worst case in total is gunicorn workers × this value, so size it to the container's CPU/memory. |
+| `MES_TOOL_RULES_FILE` | `config/tool_rules.yaml` | YAML file with local format rules (see "Local format rules"). Relative paths resolve against the `service` directory. A missing file means no rules; an invalid file stops startup. |
 | `MES_ASYNC_ENABLED` | `true` | Set to `false` to turn asynchronous processing off: `/api/v1/jobs/…` answers `404` and the UI hides "Process asynchronously". `/api/v1/extract/` is unaffected. |
 | `MES_ASYNC_MAX_WORKERS` | `2` | Background threads running asynchronous jobs (integer ≥ 1). |
 | `MES_ASYNC_MAX_JOBS` | `100` | Most jobs held at once; further submissions get HTTP `503` (integer ≥ 1). |
@@ -113,6 +115,26 @@ scrape_configs:
 | `WEB_CONCURRENCY` | `1` | Gunicorn worker processes. Must stay `1` with `MES_JOB_STORE=memory`; can be raised with `redis`. |
 | `GUNICORN_THREADS` | `4` | Threads per gunicorn worker process. |
 | `MES_FFPROBE_ENABLED`, `MES_IMAGEMAGICK_ENABLED`, `MES_METAFLAC_ENABLED`, `MES_TIKA_ENABLED` | `false` | ExifTool and MediaInfo are enabled by default; the other tools are opt-in. Binary paths: `MES_FFPROBE_COMMAND`, `MES_IMAGEMAGICK_COMMAND`, `MES_METAFLAC_COMMAND` (the `flac` package; build with `INSTALL_METAFLAC=true`). metaflac only reads FLAC: until format-based tool selection exists, it fails (a warning) on other files, so enable it only for FLAC input. Tika server URL: `MES_TIKA_URL`. |
+
+### Local format rules
+
+An operator can link file formats to extraction tools without the external Format Library, in the YAML file named by `MES_TOOL_RULES_FILE` (example: `service/config/tool_rules.yaml`; Docker Compose mounts `service/config` read-only at `/app/config`):
+
+```yaml
+rules:
+  - name: flac-audio       # unique
+    puids: [fmt/279]       # PRONOM identifiers, case-insensitive
+    extensions: [flac]     # case-insensitive, leading dot optional
+    tools: [metaflac]      # names from MES_TOOLS
+    match: any             # optional: "any" (PUID or extension, default) or "all" (both; needs both lists)
+```
+
+- Each rule needs at least one of `puids` and `extensions`, and a non-empty `tools` list. A tool that is not in `MES_TOOLS`, an unknown key or invalid YAML stops startup.
+- The PUID is the one you supplied or, when you supplied no PUID or MIME type and FFIS is enabled, the one FFIS identified. The extension comes from the uploaded filename (`photo.JPG` → `jpg`; for `a.tar.gz` only `gz`).
+- All matching rules apply and their tools are combined. When at least one rule matches, **only** those tools plus the default tool (`MES_DEFAULT_TOOL`, always first) run; rules override the all-tools default and the Format Library. With no match, tool selection is unchanged.
+- The result reports `tool_resolution.selection_method` = `local_rule` (or `local_rule_via_ffis` when FFIS supplied the PUID), the matching rule names in `tool_resolution.matched_rules` and `provenance.matched_rules`, and names them in the PREMIS event detail.
+- A rule naming a disabled tool skips it and adds the warning `tool_rule_disabled_tool`.
+- The file is re-read when it changes; a file that has become invalid makes requests fail until it is fixed, so edit it atomically.
 
 **Apache Tika.** MES does not bundle Tika; it calls a Tika server over HTTP (`PUT /rmeta`, 60 s timeout). Enable it with `MES_TIKA_ENABLED=true` and either:
 

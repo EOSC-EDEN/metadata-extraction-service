@@ -77,6 +77,7 @@ def _sample(**overrides):
             "resolved_tools": ["exiftool"],
             "selection_method": "default_tool_caller_identified",
             "identification_url": "http://ffis.example:8001",
+            "matched_rules": [],
         },
         "results": [
             {
@@ -110,6 +111,7 @@ def _sample(**overrides):
             "tool_versions": {"exiftool": "12.40", "mediainfo": None},
             "event": _event(),
             "agents": _agents(),
+            "matched_rules": [],
             "ffis": {"outcome": "success", "tools": [{"name": "siegfried", "score": 0.9, "ok": True, "x": None}]},
         },
         "errors": ["e"],
@@ -139,6 +141,25 @@ class SchemaTests(SimpleTestCase):
         xml = etree.fromstring(MESXMLRenderer().render(data))
         xsd = _xsd()
         self.assertTrue(xsd.validate(xml), xsd.error_log)
+
+    def test_local_rule_sample_validates_in_json_and_xml(self):
+        data = _sample()
+        data["tool_resolution"]["selection_method"] = "local_rule"
+        data["tool_resolution"]["matched_rules"] = ["jpeg", "photos"]
+        data["provenance"]["matched_rules"] = ["jpeg", "photos"]
+        _json_validator().validate(data)
+        xml = etree.fromstring(MESXMLRenderer().render(data))
+        self.assertTrue(_xsd().validate(xml), _xsd().error_log)
+        items = xml.findall("m:toolResolution/m:matchedRules/m:item", NS)
+        self.assertEqual([i.text for i in items], ["jpeg", "photos"])
+
+    def test_old_shape_without_matched_rules_still_validates(self):
+        data = _sample()
+        del data["tool_resolution"]["matched_rules"], data["provenance"]["matched_rules"]
+        _json_validator().validate(data)
+        xml = etree.fromstring(MESXMLRenderer().render(data))
+        self.assertIsNone(xml.find("m:toolResolution/m:matchedRules", NS))
+        self.assertTrue(_xsd().validate(xml))
 
     def test_raw_output_is_unmodified_and_escaped(self):
         xml = etree.fromstring(MESXMLRenderer().render(_sample()))

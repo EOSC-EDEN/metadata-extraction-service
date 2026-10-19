@@ -108,6 +108,7 @@
               <xs:element name="resolvedTools" type="textListType"/>
               <xs:element name="selectionMethod" type="xs:string"/>
               <xs:element name="identificationUrl" type="xs:string" minOccurs="0"/>
+              <xs:element name="matchedRules" type="textListType" minOccurs="0"/>
             </xs:sequence>
           </xs:complexType>
         </xs:element>
@@ -165,6 +166,7 @@
               </xs:element>
               <xs:element ref="premis:event"/>
               <xs:element ref="premis:agent" maxOccurs="unbounded"/>
+              <xs:element name="matchedRules" type="textListType" minOccurs="0"/>
               <xs:element name="ffis" type="valueType" minOccurs="0"/>
             </xs:sequence>
           </xs:complexType>

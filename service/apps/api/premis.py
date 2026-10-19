@@ -25,7 +25,10 @@ def _outcome_notes(result) -> list[str]:
 
 def _event_detail(result) -> str:
     tools = ", ".join(_tool_agent_ids(result)) or "no tools"
-    return f"Metadata extraction with {tools} (selection method: {result.selection_method})."
+    detail = f"Metadata extraction with {tools} (selection method: {result.selection_method}"
+    if result.matched_rules:
+        detail += f"; local rules: {', '.join(result.matched_rules)}"
+    return detail + ")."
 
 
 def build_event(

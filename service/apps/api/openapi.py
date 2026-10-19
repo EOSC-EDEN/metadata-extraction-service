@@ -151,6 +151,50 @@ class LimitsAutoSchema(AutoSchema):
         }
 
 
+class LocalRulesAutoSchema(AutoSchema):
+    """Describes the read-only listing of local format rules."""
+
+    def get_operation_id(self, path, method):
+        return "listLocalRules"
+
+    def get_responses(self, path, method):
+        return {
+            "200": {
+                "description": "The local format rules, in file order; empty when none are configured.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["rules"],
+                            "properties": {
+                                "rules": {"type": "array", "items": {"$ref": "#/components/schemas/LocalRule"}}
+                            },
+                        }
+                    }
+                },
+            }
+        }
+
+    def get_components(self, path, method):
+        return {
+            "LocalRule": {
+                "type": "object",
+                "required": ["name", "puids", "extensions", "tools", "match"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "puids": {"type": "array", "items": {"type": "string"}, "description": "PRONOM identifiers, lower-case."},
+                    "extensions": {"type": "array", "items": {"type": "string"}, "description": "File extensions, lower-case, no leading dot."},
+                    "tools": {"type": "array", "items": {"type": "string"}, "description": "Tools that run, in addition to the default tool, when the rule matches."},
+                    "match": {
+                        "type": "string",
+                        "enum": ["any", "all"],
+                        "description": "`any`: PUID or extension matches; `all`: both must match.",
+                    },
+                },
+            }
+        }
+
+
 class ToolsAutoSchema(AutoSchema):
     """Describes the read-only tool listing."""
 

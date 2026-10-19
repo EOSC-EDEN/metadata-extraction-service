@@ -129,6 +129,8 @@ def build_result_element(data: dict) -> ET.Element:
     _text_list(res_el, "resolvedTools", resolution["resolved_tools"])
     _text(res_el, "selectionMethod", resolution["selection_method"])
     _text(res_el, "identificationUrl", resolution["identification_url"])
+    if "matched_rules" in resolution:
+        _text_list(res_el, "matchedRules", resolution["matched_rules"])
 
     results_el = ET.SubElement(root, _q("results"))
     for result in data["results"]:
@@ -157,6 +159,8 @@ def build_result_element(data: dict) -> ET.Element:
     _premis_element(prov_el, "event", provenance["event"])
     for agent in provenance["agents"]:
         _premis_element(prov_el, "agent", agent)
+    if "matched_rules" in provenance:
+        _text_list(prov_el, "matchedRules", provenance["matched_rules"])
     if provenance["ffis"] is not None:
         _json_value(prov_el, "ffis", provenance["ffis"])
 
