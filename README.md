@@ -17,7 +17,7 @@ No single extraction tool can capture all relevant internal metadata for the div
 - Returning results through a standardised REST API, in both XML and JSON, for a single file or a full Submission/Archival Information Package (per the [SIP2AIP Factory specification](https://github.com/EOSC-EDEN/wp2-oais-packaging-information)).
 - Supporting extensibility, so new extraction tools can be added behind adapters without changing the core wrapper logic.
 
-Supported tool integrations are ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac (FLAC only), and Apache Tika. File Scraper is planned.
+Supported tool integrations are ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac (FLAC only), File Scraper (CLI, opt-in), and Apache Tika.
 
 See [`docs/specification.md`](docs/specification.md) for the full specification, including normative requirements and non-normative guidance.
 
@@ -114,7 +114,7 @@ scrape_configs:
 | `MES_JOB_UPLOAD_DIR` | `/var/lib/mes/uploads` | Directory for uploads while they are processed; created at startup if missing, and startup fails if it is not writable. Mount a volume here. In local development and tests it defaults to a directory under the system temp dir. |
 | `WEB_CONCURRENCY` | `1` | Gunicorn worker processes. Must stay `1` with `MES_JOB_STORE=memory`; can be raised with `redis`. |
 | `GUNICORN_THREADS` | `4` | Threads per gunicorn worker process. |
-| `MES_FFPROBE_ENABLED`, `MES_IMAGEMAGICK_ENABLED`, `MES_METAFLAC_ENABLED`, `MES_TIKA_ENABLED` | `false` | ExifTool and MediaInfo are enabled by default; the other tools are opt-in. Binary paths: `MES_FFPROBE_COMMAND`, `MES_IMAGEMAGICK_COMMAND`, `MES_METAFLAC_COMMAND` (the `flac` package; build with `INSTALL_METAFLAC=true`). metaflac only reads FLAC: until format-based tool selection exists, it fails (a warning) on other files, so enable it only for FLAC input. Tika server URL: `MES_TIKA_URL`. |
+| `MES_FFPROBE_ENABLED`, `MES_IMAGEMAGICK_ENABLED`, `MES_METAFLAC_ENABLED`, `MES_FILE_SCRAPER_ENABLED`, `MES_TIKA_ENABLED` | `false` | ExifTool and MediaInfo are enabled by default; the other tools are opt-in. Binary paths: `MES_FFPROBE_COMMAND`, `MES_IMAGEMAGICK_COMMAND`, `MES_METAFLAC_COMMAND` (the `flac` package; build with `INSTALL_METAFLAC=true`). metaflac only reads FLAC: until format-based tool selection exists, it fails (a warning) on other files, so enable it only for FLAC input. File Scraper runs the `scraper` CLI (`MES_FILE_SCRAPER_COMMAND`; build with `INSTALL_FILE_SCRAPER=true`, which adds several hundred MB); `MES_FILE_SCRAPER_SKIP_WELLFORMED=true` adds `--skip-wellformed-check` for a lighter metadata-only run. It exits 0 for files that are not well-formed: check `well-formed` and `errors` in its JSON. Tika server URL: `MES_TIKA_URL`. |
 
 ### Local format rules
 

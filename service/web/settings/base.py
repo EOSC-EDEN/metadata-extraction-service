@@ -143,6 +143,9 @@ def _env_flag(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).lower() in ("1", "true", "yes")
 
 
+# Adds --skip-wellformed-check to File Scraper: metadata only, much lighter.
+MES_FILE_SCRAPER_SKIP_WELLFORMED = _env_flag("MES_FILE_SCRAPER_SKIP_WELLFORMED")
+
 MES_TOOLS = {
     "exiftool": {
         "adapter": "apps.extraction.adapters.exiftool.ExifToolAdapter",
@@ -189,6 +192,17 @@ MES_TOOLS = {
         "extra_args": [],
         "timeout_seconds": 30,
         "enabled": _env_flag("MES_METAFLAC_ENABLED"),
+        "mandatory": False,
+    },
+    "file_scraper": {
+        "adapter": "apps.extraction.adapters.file_scraper.FileScraperAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_FILE_SCRAPER_COMMAND", "scraper"),
+        "extra_args": [],
+        # Slow: JHove, veraPDF and LibreOffice can take a long time on large files. The
+        # gunicorn worker timeout (120 s) still applies to synchronous requests.
+        "timeout_seconds": 120,
+        "enabled": _env_flag("MES_FILE_SCRAPER_ENABLED"),
         "mandatory": False,
     },
     "tika": {

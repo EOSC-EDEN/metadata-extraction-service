@@ -35,6 +35,7 @@ class DefaultToolSetTests(SimpleTestCase):
         "ffprobe": "FFprobeAdapter",
         "imagemagick": "ImageMagickAdapter",
         "metaflac": "MetaflacAdapter",
+        "file_scraper": "FileScraperAdapter",
         "tika": "TikaAdapter",
     }
 
