@@ -18,6 +18,8 @@ Diagrams:
 2. [Local CLI tool path](#sequence-diagram--local-cli-tool-path-exiftool) — what a subprocess adapter does
 3. [Hosted HTTP service path](#sequence-diagram--hosted-http-service-path-apache-tika) — what an HTTP adapter does
 4. [Asynchronous job](#sequence-diagram--asynchronous-job-post-apiv1jobs) — submit, poll, fetch the result
+5. [Synchronous batch](#sequence-diagram--synchronous-batch-post-apiv1extractbatch) — several files in one request
+6. [Asynchronous batch](#sequence-diagram--asynchronous-batch-post-apiv1jobsbatch) — one job per file, polled as a batch
 
 ## Sequence diagram — synchronous extraction (`POST /api/v1/extract/`)
 
@@ -52,7 +54,7 @@ sequenceDiagram
     alt too large or invalid
         API-->>Client: 413 or 400 error response
     end
-    API->>API: save upload to a temp dir (original suffix kept)
+    API->>API: save_upload to a temp dir (original suffix kept)
     API->>Orch: extract(path, puid, mime_type, request_id)
     Orch->>Res: resolve_tools(path, puid, mime_type)
     alt no PUID or MIME type supplied
@@ -182,7 +184,7 @@ sequenceDiagram
     participant Orch as ExtractionOrchestrator
 
     Client->>API: POST /api/v1/jobs/ (file, puid?, mime_type?)
-    API->>API: check declared length, validate request, save upload to a work dir
+    API->>API: check declared length, validate request, save_upload to a work dir
     API->>Jobs: submit(file_path, work_dir, ...)
     Jobs->>Jobs: purge_expired()
     Jobs->>Store: create(JobRecord status=pending)
@@ -222,3 +224,88 @@ sequenceDiagram
 
 A finished job's data is kept for `MES_JOB_TTL_SECONDS`; expired jobs and their uploads are purged on
 access and on submit.
+
+## Sequence diagram — synchronous batch (`POST /api/v1/extract/batch/`)
+
+Several files in one multipart request (the `files` field repeated once per file; at most
+`MES_MAX_FILES_PER_REQUEST`, advertised by `GET /limits/`). `puid` and `mime_type` apply to every file;
+`object_identifier` is not accepted, because each file is identified by its filename. The files are
+processed one after another, and each goes through the same `extract()` as `/extract/`, so its `result`
+equals what that route returns for it. A request that is not acceptable (no files, too many, an empty
+file, too large) is refused as a whole before anything runs. Once accepted, a file that fails gets an
+`errors` entry in its place and the others are unaffected, so the response is `200`.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as BatchExtractMetadataView
+    participant Orch as ExtractionOrchestrator
+
+    Client->>API: POST /api/v1/extract/batch/ (files[], puid?, mime_type?)
+    API->>API: check declared length, validate request
+    alt too large, no files, too many files, an empty file or invalid
+        API-->>Client: 413 or 400 error response (nothing is extracted)
+    end
+    API->>API: create one temp work dir
+    loop for each file, in order (index i)
+        API->>API: save_upload into work_dir/i (one directory per file)
+        API->>Orch: extract(path, puid, mime_type, request_id "{id}-i", filename)
+        alt extracted
+            Orch-->>API: AggregatedExtractionResult
+            API->>API: entry {index, filename, result}
+        else ToolNotConfigured or an unexpected error
+            API->>API: log with the request_id, entry {index, filename, errors}
+        end
+    end
+    API->>API: remove the work dir, record metrics
+    API-->>Client: 200 OK {"results": [entry, ...]} (JSON or XML per Accept header)
+```
+
+## Sequence diagram — asynchronous batch (`POST /api/v1/jobs/batch/`)
+
+The batch counterpart of the asynchronous job, available when `MES_ASYNC_ENABLED` is on (the routes
+answer 404 otherwise). It queues one ordinary job per file, **all or none**: the job store must have
+room for every file, or nothing is created. Each job then runs, and is polled and fetched, exactly as
+in the previous async diagram (`GET /jobs/{job_id}/` and `/jobs/{job_id}/result/`). The batch adds only
+a grouping record, so the client can poll all the jobs with one request.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as Batch job views
+    participant Jobs as JobService
+    participant Store as JobStore
+    participant Worker as worker thread
+
+    Client->>API: POST /api/v1/jobs/batch/ (files[], puid?, mime_type?)
+    API->>API: check declared length, validate request
+    API->>API: one work dir per file, save_upload into each
+    API->>Jobs: submit_batch(items, puid, mime_type, request_id)
+    Jobs->>Jobs: purge_expired()
+    Jobs->>Store: create_many(one pending JobRecord per file)
+    alt not enough room for every file (MES_ASYNC_MAX_JOBS)
+        Store-->>Jobs: JobStoreFull (no job created)
+        API->>API: remove every work dir
+        API-->>Client: 503 jobs_at_capacity
+    else accepted
+        Jobs->>Store: create_batch(BatchRecord: index, filename, job_id per file)
+        loop for each file (index i)
+            Jobs->>Worker: executor.submit(run job, request id "{id}-i")
+        end
+        note over Jobs: if the executor refuses a job, that job and the later ones are marked failed (uploads removed) and the batch is still reported
+        API-->>Client: 202 Accepted + Location: /api/v1/job-batches/{batch_id}/
+    end
+
+    loop until every job has finished or the batch expires
+        Client->>API: GET /api/v1/job-batches/{batch_id}/
+        API->>Jobs: get_batch(batch_id)
+        Jobs->>Store: get_batch(batch_id), get each job
+        alt unknown or expired
+            API-->>Client: 404
+        else
+            API-->>Client: 200 batch envelope (each file's job_id and current status)
+        end
+    end
+```
+
+Each job in a batch is kept for `MES_JOB_TTL_SECONDS` like any other job.
