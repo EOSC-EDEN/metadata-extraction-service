@@ -13,6 +13,13 @@ has not finished is given the same time from its creation. A job whose age equal
 expired. Expired jobs are purged on access and on submit, and their upload is deleted then, so a job
 that never finishes (or times out) does not keep its data. A late result of a purged job is discarded.
 
+Batches (`POST /api/v1/jobs/batch/`): a batch is one ordinary job per file plus a `BatchRecord` listing
+them. It has no state of its own; its status is computed from its jobs (`aggregate_batch_status`).
+A batch lives or expires as one unit: its jobs never expire one by one, and when the batch is as old
+as the TTL (its age is that of its youngest job: the latest finish, or the creation for a job that
+has not finished) the batch record and every job go together, with their uploads. A batch that has
+lost a job (for example a Redis key expired) is never served, and is removed whole once it is old enough.
+
 Metrics: a job is counted in `mes_extract_requests_total` once a worker has run it (never while it
 waits, and never if it expires before being picked up). `mes_jobs_waiting` and `mes_jobs_waiting_bytes`
 are read from the store at scrape time (`waiting()`), not kept as per-process gauges.
@@ -24,13 +31,14 @@ import shutil
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 from apps.api.job_store import (  # noqa: F401  (re-exported: the job types live in job_store)
+    BatchRecord,
     InMemoryJobStore,
     JobRecord,
     JobStatus,
@@ -64,6 +72,21 @@ def _extract_and_serialize(
         object_identifier=object_identifier,
         object_identifier_type=object_identifier_type,
     )
+
+
+def aggregate_batch_status(statuses) -> str:
+    """pending: all pending; succeeded or failed: all of that; partial: all finished, some failed;
+    running: anything else (some running, or pending mixed with finished)."""
+    statuses = list(statuses)
+    if all(s is JobStatus.PENDING for s in statuses):
+        return "pending"
+    if all(s is JobStatus.SUCCEEDED for s in statuses):
+        return "succeeded"
+    if all(s is JobStatus.FAILED for s in statuses):
+        return "failed"
+    if all(s in (JobStatus.SUCCEEDED, JobStatus.FAILED) for s in statuses):
+        return "partial"
+    return "running"
 
 
 def _utcnow():
@@ -121,6 +144,74 @@ class JobService:
             raise
         return record
 
+    def submit_batch(self, items, *, puid, mime_type, request_id) -> tuple[BatchRecord, list[JobRecord]]:
+        """Queue one job per item (`file_path`, `work_dir`, `filename`, `size_bytes`), all or none.
+
+        Raises `JobStoreFull`, with no job created, unless the store has room for every item; the
+        caller then still owns every `work_dir`. Otherwise each job owns its `work_dir` from here on.
+        Job `i` runs with request id `<request_id>-<i>`. If the executor refuses a job, that job and
+        the ones after it are marked failed (and their uploads removed) instead of raising: the
+        earlier ones are already running, so the batch is still reported.
+        """
+        self.purge_expired()
+        now = self._clock()
+        batch_id = str(uuid.uuid4())
+        records = [
+            JobRecord(
+                job_id=str(uuid.uuid4()),
+                request_id=f"{request_id}-{index}",
+                status=JobStatus.PENDING,
+                created_at=now,
+                work_dir=item["work_dir"],
+                size_bytes=item["size_bytes"],
+                batch_id=batch_id,
+            )
+            for index, item in enumerate(items)
+        ]
+        self._store.create_many(records)
+        batch = BatchRecord(
+            batch_id=batch_id,
+            request_id=request_id,
+            created_at=now,
+            jobs=[
+                {"index": index, "filename": item["filename"], "job_id": record.job_id}
+                for index, (item, record) in enumerate(zip(items, records))
+            ],
+        )
+        self._store.create_batch(batch)
+        for position, (item, record) in enumerate(zip(items, records)):
+            try:
+                self._executor.submit(
+                    self._run,
+                    record.job_id,
+                    item["file_path"],
+                    item["work_dir"],
+                    item["filename"],
+                    puid,
+                    mime_type,
+                    record.request_id,
+                    None,
+                    None,
+                )
+            except Exception:
+                logger.exception("batch %s: could not queue job %s", batch.batch_id, record.job_id)
+                for refused, refused_record in list(zip(items, records))[position:]:
+                    self._finish(refused_record.job_id, JobStatus.FAILED, errors=[_UNEXPECTED_ERROR])
+                    shutil.rmtree(refused["work_dir"], ignore_errors=True)
+                break
+        return batch, records
+
+    def get_batch(self, batch_id) -> tuple[BatchRecord, list[JobRecord]] | None:
+        """The batch with the current record of each of its jobs, or None if unknown or expired."""
+        self.purge_expired()
+        batch = self._store.get_batch(batch_id)
+        if batch is None:
+            return None
+        jobs = [self._store.get(entry["job_id"]) for entry in batch.jobs]
+        if any(job is None for job in jobs):
+            return None
+        return batch, jobs
+
     def get(self, job_id) -> JobRecord | None:
         self.purge_expired()
         return self._store.get(job_id)
@@ -131,12 +222,38 @@ class JobService:
         return self._store.waiting()
 
     def purge_expired(self) -> int:
-        """Delete expired jobs and their uploads; return how many jobs were removed."""
-        expired = self._store.delete_expired(self._clock(), self._ttl_seconds)
+        """Delete expired jobs and batches with their uploads; return how many jobs were removed.
+
+        A job that belongs to a batch is only ever removed together with its batch.
+        """
+        now = self._clock()
+        expired = self._store.delete_expired(now, self._ttl_seconds)
+        expired += self._purge_expired_batches(now)
         for record in expired:
             if record.work_dir:
                 shutil.rmtree(record.work_dir, ignore_errors=True)
         return len(expired)
+
+    def _purge_expired_batches(self, now) -> list[JobRecord]:
+        """Remove each batch that is as old as the TTL, with all of its jobs, and return those jobs.
+
+        A batch cannot be older than its creation, so only batches created at least a TTL ago are
+        looked at. Its age is the age of its youngest job; a batch that lost a job counts as old
+        enough as soon as it is a TTL old, whatever the remaining jobs say.
+        """
+        cutoff = now - timedelta(seconds=self._ttl_seconds)
+        removed = []
+        for batch in self._store.batches_created_before(cutoff):
+            jobs = [self._store.get(entry["job_id"]) for entry in batch.jobs]
+            present = [job for job in jobs if job is not None]
+            if len(present) == len(jobs) and max(job.aged_from for job in present) > cutoff:
+                continue
+            for job in present:
+                deleted = self._store.delete(job.job_id)
+                if deleted is not None:
+                    removed.append(deleted)
+            self._store.delete_batch(batch.batch_id)
+        return removed
 
     def live_work_dirs(self) -> set[str]:
         """The upload directories of the jobs currently stored."""

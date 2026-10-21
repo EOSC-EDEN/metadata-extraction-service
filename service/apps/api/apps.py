@@ -8,8 +8,9 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         from .jobs import get_job_service, validate_jobs_config
-        from .serializers import validate_upload_limit_config
+        from .serializers import validate_files_per_request_config, validate_upload_limit_config
 
         validate_upload_limit_config()
+        validate_files_per_request_config()
         validate_jobs_config()
         get_job_service()

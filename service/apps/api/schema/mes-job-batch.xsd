@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML representation of the MES job batch envelope. Mirrors mes-job-batch.schema.json:
+  snake_case JSON keys become camelCase elements. A filename containing characters that XML
+  cannot carry is base64-encoded and marked encoding="base64" (r:textType of mes-result.xsd).
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:eden:mes:job-batch:1"
+           xmlns:r="urn:eden:mes:result:1"
+           targetNamespace="urn:eden:mes:job-batch:1"
+           elementFormDefault="qualified">
+
+  <xs:import namespace="urn:eden:mes:result:1" schemaLocation="mes-result.xsd"/>
+
+  <xs:element name="jobBatch">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="batchId" type="xs:string"/>
+        <xs:element name="createdAt" type="xs:dateTime"/>
+        <xs:element name="status">
+          <xs:simpleType>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="pending"/>
+              <xs:enumeration value="running"/>
+              <xs:enumeration value="succeeded"/>
+              <xs:enumeration value="failed"/>
+              <xs:enumeration value="partial"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="jobs">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="job" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="index" type="xs:nonNegativeInteger"/>
+                    <xs:element name="filename" type="r:textType"/>
+                    <xs:element name="jobId" type="xs:string"/>
+                    <xs:element name="status">
+                      <xs:simpleType>
+                        <xs:restriction base="xs:string">
+                          <xs:enumeration value="pending"/>
+                          <xs:enumeration value="running"/>
+                          <xs:enumeration value="succeeded"/>
+                          <xs:enumeration value="failed"/>
+                        </xs:restriction>
+                      </xs:simpleType>
+                    </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

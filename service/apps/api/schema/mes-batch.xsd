@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML representation of the MES batch extraction response. Mirrors mes-batch.schema.json:
+  one entry per uploaded file, holding either the unchanged mes-result document
+  (extractionResult, see mes-result.xsd) or the reasons the file could not be processed.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:eden:mes:batch:1"
+           xmlns:r="urn:eden:mes:result:1"
+           targetNamespace="urn:eden:mes:batch:1"
+           elementFormDefault="qualified">
+
+  <xs:import namespace="urn:eden:mes:result:1" schemaLocation="mes-result.xsd"/>
+
+  <xs:element name="batch">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="entry" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="index" type="xs:nonNegativeInteger"/>
+              <xs:element name="filename" type="r:textType"/>
+              <xs:choice>
+                <xs:element ref="r:extractionResult"/>
+                <xs:element name="errors" type="r:textListType"/>
+              </xs:choice>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

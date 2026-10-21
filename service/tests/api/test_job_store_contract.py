@@ -11,6 +11,7 @@ import fakeredis
 from django.test import SimpleTestCase
 
 from apps.api.job_store import (
+    BatchRecord,
     InMemoryJobStore,
     JobRecord,
     JobStatus,
@@ -33,7 +34,30 @@ def _record(job_id="j1", status=JobStatus.PENDING, created_at=T0, size_bytes=0, 
     )
 
 
+def _batch(batch_id="b1", job_ids=("j1",), created_at=T0):
+    return BatchRecord(
+        batch_id=batch_id,
+        request_id="req-" + batch_id,
+        created_at=created_at,
+        jobs=[{"index": i, "filename": f"f{i}.jpg", "job_id": job_id} for i, job_id in enumerate(job_ids)],
+    )
+
+
 class JobRecordSerialisationTests(SimpleTestCase):
+    def test_a_batch_record_round_trips(self):
+        batch = _batch("b1", ["j1", "j2"])
+        self.assertEqual(BatchRecord.from_dict(batch.to_dict()), batch)
+
+    def test_a_job_remembers_its_batch(self):
+        record = _record(batch_id="b1")
+        self.assertEqual(JobRecord.from_dict(record.to_dict()), record)
+        self.assertEqual(JobRecord.from_dict(record.to_dict()).batch_id, "b1")
+
+    def test_a_record_stored_before_batches_existed_has_no_batch(self):
+        data = _record().to_dict()
+        del data["batch_id"]
+        self.assertIsNone(JobRecord.from_dict(data).batch_id)
+
     def test_round_trip_of_a_new_job(self):
         record = _record(work_dir="/tmp/x", size_bytes=7)
         self.assertEqual(JobRecord.from_dict(record.to_dict()), record)
@@ -236,6 +260,111 @@ class JobStoreContract:
         with ThreadPoolExecutor(max_workers=2) as pool:
             first, second = pool.map(lambda s: s.delete_expired(now, TTL), (store, peer))
         self.assertEqual(len(first) + len(second), 10)
+
+    # --- batches (step 24) ---
+
+    def test_create_many_stores_every_job(self):
+        store = self.make_store()
+        store.create_many([_record("a"), _record("b"), _record("c")])
+        self.assertEqual([store.get(i).job_id for i in "abc"], ["a", "b", "c"])
+
+    def _create_many_with_free_slots(self, free, count):
+        """Offer `count` jobs to a store (cap 5) with `free` slots left; return (store, offered)."""
+        store = self.make_store(max_jobs=5)
+        store.create_many([_record(f"old{n}") for n in range(5 - free)])
+        offered = [_record(f"new{n}", work_dir=f"/w/new{n}") for n in range(count)]
+        return store, offered
+
+    def assertAccepted(self, free, count):
+        store, offered = self._create_many_with_free_slots(free, count)
+        store.create_many(offered)
+        self.assertTrue(all(store.get(r.job_id) for r in offered))
+
+    def assertRefusedWholly(self, free, count):
+        store, offered = self._create_many_with_free_slots(free, count)
+        with self.assertRaises(JobStoreFull):
+            store.create_many(offered)
+        self.assertTrue(all(store.get(r.job_id) is None for r in offered))
+        self.assertTrue(store.work_dirs().isdisjoint({r.work_dir for r in offered}))
+
+    def test_create_many_fits_exactly_the_free_slots(self):
+        self.assertAccepted(free=3, count=3)
+
+    def test_create_many_one_over_the_free_slots_creates_nothing(self):
+        self.assertRefusedWholly(free=3, count=4)
+
+    def test_create_many_with_room_for_n_minus_one_creates_nothing(self):
+        self.assertRefusedWholly(free=2, count=3)
+
+    def test_create_many_of_one_into_the_last_slot(self):
+        self.assertAccepted(free=1, count=1)
+
+    def test_create_many_into_a_full_store_creates_nothing(self):
+        self.assertRefusedWholly(free=0, count=1)
+
+    def test_create_many_of_nothing_is_a_no_op(self):
+        self.make_store(max_jobs=1).create_many([])
+
+    def test_a_batch_round_trips(self):
+        store = self.make_store()
+        batch = _batch("b1", ["j1", "j2"])
+        store.create_batch(batch)
+        self.assertEqual(store.get_batch("b1"), batch)
+
+    def test_get_unknown_batch_is_none(self):
+        self.assertIsNone(self.make_store().get_batch("nope"))
+
+    def test_batches_lists_every_stored_batch(self):
+        store = self.make_store()
+        store.create_batch(_batch("b1", ["j1"]))
+        store.create_batch(_batch("b2", ["j2"]))
+        self.assertEqual({b.batch_id for b in store.batches()}, {"b1", "b2"})
+
+    def test_delete_batch_removes_only_that_batch(self):
+        store = self.make_store()
+        store.create_batch(_batch("b1", ["j1"]))
+        store.create_batch(_batch("b2", ["j2"]))
+        store.delete_batch("b1")
+        store.delete_batch("never-existed")
+        self.assertIsNone(store.get_batch("b1"))
+        self.assertIsNotNone(store.get_batch("b2"))
+
+    def test_delete_returns_the_removed_job_and_frees_its_slot(self):
+        store = self.make_store(max_jobs=1)
+        record = _record("a", work_dir="/w/a")
+        store.create(record)
+        self.assertEqual(store.delete("a"), record)
+        self.assertIsNone(store.get("a"))
+        self.assertIsNone(store.delete("a"))  # already gone
+        store.create(_record("b"))
+
+    def test_delete_expired_never_removes_a_job_of_a_batch(self):
+        store = self.make_store()
+        store.create_many([_record("solo"), _record("grouped", batch_id="b1")])
+
+        removed = store.delete_expired(T0 + timedelta(seconds=TTL * 10), TTL)
+
+        self.assertEqual([r.job_id for r in removed], ["solo"])
+        self.assertIsNotNone(store.get("grouped"))
+
+    def test_batches_created_before_boundary(self):
+        store = self.make_store()
+        store.create_batch(_batch("old", ["j1"], created_at=T0))
+        store.create_batch(_batch("new", ["j2"], created_at=T0 + timedelta(seconds=10)))
+        # at the cutoff counts (a batch whose age equals the TTL is a candidate), one second before does not
+        cases = ((-1, set()), (0, {"old"}), (9, {"old"}), (10, {"old", "new"}))
+        for offset, expected in cases:
+            with self.subTest(offset=offset):
+                found = store.batches_created_before(T0 + timedelta(seconds=offset))
+                self.assertEqual({b.batch_id for b in found}, expected)
+
+    def test_the_other_worker_sees_a_batch(self):
+        store = self.make_store()
+        peer = self.make_peer(store)
+        if peer is None:
+            self.skipTest("single-process store")
+        store.create_batch(_batch("b1", ["j1"]))
+        self.assertEqual(peer.get_batch("b1"), _batch("b1", ["j1"]))
 
 
 class InMemoryJobStoreContractTests(JobStoreContract, SimpleTestCase):

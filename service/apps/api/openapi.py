@@ -133,11 +133,15 @@ class LimitsAutoSchema(AutoSchema):
                     "application/json": {
                         "schema": {
                             "type": "object",
-                            "required": ["max_upload_bytes", "async_enabled"],
+                            "required": ["max_upload_bytes", "max_files_per_request", "async_enabled"],
                             "properties": {
                                 "max_upload_bytes": {
                                     "type": "integer",
                                     "description": "Largest accepted upload; larger files get HTTP 413.",
+                                },
+                                "max_files_per_request": {
+                                    "type": "integer",
+                                    "description": "Most files accepted by one batch request (`MES_MAX_FILES_PER_REQUEST`); more get HTTP 400.",
                                 },
                                 "async_enabled": {
                                     "type": "boolean",
@@ -309,4 +313,131 @@ class JobResultAutoSchema(AutoSchema):
             },
             "404": _job_error("Unknown or expired job, or asynchronous processing is disabled."),
             "409": _job_error("The job has not finished, or it failed and so has no result."),
+        }
+
+
+def _inline_result_ref(node, result_schema):
+    """Replace the `$ref` to the mes-result schema by the schema itself (OpenAPI components cannot
+    resolve a `urn:` id)."""
+    if isinstance(node, list):
+        return [_inline_result_ref(item, result_schema) for item in node]
+    if not isinstance(node, dict):
+        return node
+    if node.get("$ref") == "urn:eden:mes:result:1":
+        return deepcopy(result_schema)
+    return {key: _inline_result_ref(value, result_schema) for key, value in node.items()}
+
+
+def load_batch_schema() -> dict:
+    batch = json.loads((SCHEMA_DIR / "mes-batch.schema.json").read_text())
+    return _to_openapi(_inline_result_ref(batch, load_result_schema()))
+
+
+def load_job_batch_schema() -> dict:
+    return _to_openapi(json.loads((SCHEMA_DIR / "mes-job-batch.schema.json").read_text()))
+
+
+_BATCH_ID_PARAMETER = {
+    "name": "batch_id",
+    "in": "path",
+    "required": True,
+    "schema": {"type": "string"},
+    "description": "The `batch_id` returned when the batch was submitted.",
+}
+
+
+class _BatchRequestBodyMixin:
+    def get_request_body(self, path, method):
+        return {
+            "required": True,
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["files"],
+                        "properties": {
+                            "files": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": {"type": "string", "format": "binary"},
+                                "description": (
+                                    "The files to extract metadata from: repeat the `files` field once per "
+                                    "file. At most `max_files_per_request` files (`GET /limits/`) and "
+                                    "`max_upload_bytes` in total."
+                                ),
+                            },
+                            "puid": {
+                                "type": "string",
+                                "maxLength": 64,
+                                "description": "Optional PRONOM PUID, applied to every file. If given, format identification is not called.",
+                            },
+                            "mime_type": {
+                                "type": "string",
+                                "maxLength": 255,
+                                "description": "Optional MIME type, applied to every file. If given, format identification is not called.",
+                            },
+                        },
+                    }
+                }
+            },
+        }
+
+
+class BatchExtractAutoSchema(_BatchRequestBodyMixin, AutoSchema):
+    """Several files in one request; one entry per file, in upload order."""
+
+    def get_operation_id(self, path, method):
+        return "extractMetadataBatch"
+
+    def get_responses(self, path, method):
+        return {
+            "200": {
+                "description": (
+                    "One entry per file, in upload order: its `result` (exactly what `/extract/` returns "
+                    "for that file) or `errors` if that file could not be processed. A batch with a failed "
+                    "file is still `200`. JSON, or XML with `Accept: application/xml`."
+                ),
+                "content": _json_and_xml(load_batch_schema()),
+            },
+            "400": _job_error("No files, too many files (`MES_MAX_FILES_PER_REQUEST`), an empty file, or an object identifier was given."),
+            "413": _job_error("The files together exceed the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
+            "500": _job_error("Unexpected error while processing the request."),
+        }
+
+
+class BatchJobSubmitAutoSchema(_BatchRequestBodyMixin, AutoSchema):
+    """Same multipart body as `/extract/batch/`; one job per file, all or none."""
+
+    def get_operation_id(self, path, method):
+        return "submitJobBatch"
+
+    def get_responses(self, path, method):
+        return {
+            "202": {
+                "description": "Batch accepted. `Location` points at the batch status resource.",
+                "headers": {"Location": {"schema": {"type": "string"}}},
+                "content": _json_and_xml(load_job_batch_schema()),
+            },
+            "400": _job_error("No files, too many files, an empty file, or an object identifier was given."),
+            "404": _job_error("Asynchronous processing is disabled (`MES_ASYNC_ENABLED`)."),
+            "413": _job_error("The files together exceed the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
+            "500": _job_error("Unexpected error while processing the request."),
+            "503": _job_error("The job store cannot take every file (`MES_ASYNC_MAX_JOBS`); no job was created."),
+        }
+
+
+class BatchJobStatusAutoSchema(AutoSchema):
+    def get_operation_id(self, path, method):
+        return "getJobBatch"
+
+    def get_path_parameters(self, path, method):
+        return [deepcopy(_BATCH_ID_PARAMETER)]
+
+    def get_responses(self, path, method):
+        return {
+            "200": {
+                "description": "The batch with the current status of each file's job (JSON, or XML with `Accept: application/xml`).",
+                "content": _json_and_xml(load_job_batch_schema()),
+            },
+            "404": _job_error("Unknown or expired batch, or asynchronous processing is disabled."),
         }

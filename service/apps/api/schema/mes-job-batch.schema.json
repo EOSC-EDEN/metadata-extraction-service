@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:eden:mes:job-batch:1",
+  "title": "MES job batch envelope",
+  "description": "Response of POST /api/v1/jobs/batch/ (202) and GET /api/v1/job-batches/{batch_id}/. One ordinary job per uploaded file, in upload order; each file's result is served by GET /api/v1/jobs/{job_id}/result/. The batch status is computed from the jobs: pending (all pending), running (any running, or pending mixed with finished), succeeded (all succeeded), failed (all failed) or partial (all finished, some failed). The XML representation (mes-job-batch.xsd) carries the same content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "created_at", "status", "jobs"],
+  "properties": {
+    "batch_id": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "status": {"type": "string", "enum": ["pending", "running", "succeeded", "failed", "partial"]},
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "filename", "job_id", "status"],
+        "properties": {
+          "index": {"description": "Position of the file in the upload, starting at 0.", "type": "integer", "minimum": 0},
+          "filename": {"type": "string"},
+          "job_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["pending", "running", "succeeded", "failed"]}
+        }
+      }
+    }
+  }
+}

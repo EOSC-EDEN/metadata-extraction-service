@@ -36,6 +36,16 @@ UPLOADED_BYTES = Counter(
     "mes_uploaded_bytes_total",
     "Accumulated size of all files submitted for extraction, in bytes.",
 )
+BATCH_REQUESTS = Counter(
+    "mes_batch_requests_total",
+    "Batch extraction requests by outcome: success, partial, failed or rejected (synchronous), accepted (asynchronous).",
+    ["status"],
+)
+BATCH_FILES = Histogram(
+    "mes_batch_files",
+    "Number of files in the batch extraction requests that were accepted.",
+    buckets=(1, 2, 5, 10, 20, 50, 100),
+)
 TOOL_RUNS = Counter(
     "mes_tool_runs_total",
     "Extraction tool executions by tool and execution status.",
@@ -81,6 +91,25 @@ class JobsWaitingCollector(Collector):
 def record_request(status: str, duration_seconds: float) -> None:
     EXTRACT_REQUESTS.labels(status=status).inc()
     EXTRACT_DURATION.observe(duration_seconds)
+
+
+def record_batch(status: str, file_count: int = 0) -> None:
+    BATCH_REQUESTS.labels(status=status).inc()
+    if file_count:
+        BATCH_FILES.observe(file_count)
+
+
+def classify_batch(entries) -> str:
+    """success: every file extracted fully; failed: none did; partial: anything in between."""
+    outcomes = [
+        classify_serialized_outcome(entry["result"]) if "result" in entry else "error"
+        for entry in entries
+    ]
+    if all(o == "success" for o in outcomes):
+        return "success"
+    if all(o in ("failed", "error") for o in outcomes):
+        return "failed"
+    return "partial"
 
 
 def record_upload(size_bytes: int) -> None:

@@ -276,6 +276,25 @@
       font-size: .87rem;
       margin-bottom: .5rem;
     }
+    /* Several files: one result group per file */
+    #batch-results { display: none; margin-top: 2rem; }
+    .batch-group { margin-bottom: 2.5rem; }
+    .batch-group-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: .5rem;
+      overflow-wrap: anywhere;
+    }
+    .batch-status { font-size: .85rem; color: #555; margin-bottom: .75rem; }
+    .batch-error {
+      display: none;
+      background: #fee2e2;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      color: #991b1b;
+      font-size: .93rem;
+      overflow-wrap: anywhere;
+    }
     details.raw { margin-top: .4rem; }
     details.raw summary { cursor: pointer; font-size: .8rem; color: #4f6ef7; font-weight: 600; }
     details.raw pre {
@@ -345,9 +364,9 @@
 
   <div id="drop-zone">
     <div class="icon">📄</div>
-    <p>Drag &amp; drop a file here, or <strong id="browse-link">browse to upload</strong></p>
+    <p>Drag &amp; drop a file (or several) here, or <strong id="browse-link">browse to upload</strong></p>
     <p style="margin-top:.5rem;font-size:.83rem;color:#888">Any file type</p>
-    <input type="file" id="file-input" />
+    <input type="file" id="file-input" multiple />
   </div>
 
   <div id="spinner">
@@ -401,6 +420,8 @@
 
   </div>
 
+  <div id="batch-results"></div>
+
   <div id="try-again">
     <button class="try-again-btn" id="try-again-btn">Extract another file</button>
   </div>
@@ -428,10 +449,20 @@
   const asyncCheckbox = document.getElementById('async-checkbox');
   const spinnerText   = document.getElementById('spinner-text');
   const infoPanel  = document.getElementById('info-panel');
+  const batchResults = document.getElementById('batch-results');
+
+  // The untouched result markup, cloned (ids moved to data-role) for each file of a batch.
+  const RESULT_TEMPLATE = resultDiv.cloneNode(true);
+
+  // Find a part of a result by its id in the page, or by data-role inside a cloned group.
+  function part(root, name) {
+    return root.querySelector('#' + name) || root.querySelector(`[data-role="${name}"]`);
+  }
 
   // ── Service info panel: limits and tools ────────────────────
   // Purely informational: any failure leaves the panel hidden and uploads work.
   let maxUploadBytes = null;
+  let maxFilesPerRequest = null;
   let infoReady = false;
 
   async function loadServiceInfo() {
@@ -444,8 +475,10 @@
       const tools = (await toolsResp.json()).tools || [];
 
       maxUploadBytes = Number.isInteger(limits.max_upload_bytes) ? limits.max_upload_bytes : null;
+      maxFilesPerRequest = Number.isInteger(limits.max_files_per_request) ? limits.max_files_per_request : null;
       document.getElementById('limit-text').innerHTML =
-        `<b>Max file size</b> ${maxUploadBytes === null ? 'unknown' : esc(fmt_bytes(maxUploadBytes))}`;
+        `<b>Max upload size</b> ${maxUploadBytes === null ? 'unknown' : esc(fmt_bytes(maxUploadBytes))}` +
+        (maxFilesPerRequest === null ? '' : ` &nbsp;·&nbsp; <b>Max files per request</b> ${esc(maxFilesPerRequest)}`);
 
       document.getElementById('tool-chips').innerHTML = tools.map(t => {
         const badges = [
@@ -491,16 +524,14 @@
   }
 
   browseLink.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) extractFile(fileInput.files[0]);
-  });
+  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    if (e.dataTransfer.files[0]) extractFile(e.dataTransfer.files[0]);
+    handleFiles(e.dataTransfer.files);
   });
 
   document.getElementById('try-again-btn').addEventListener('click', reset);
@@ -515,6 +546,8 @@
     resultDiv.style.display = 'none';
     errorDiv.style.display = 'none';
     tryAgain.style.display = 'none';
+    batchResults.innerHTML = '';
+    batchResults.style.display = 'none';
   }
 
   // DRF validation errors look like {"file": ["..."]}; MES errors like {"errors": [...]}.
@@ -555,6 +588,156 @@
     }
     if (job.status === 'failed') throw new Error((job.errors || []).join(' ') || 'The job failed.');
     return fetchJson(jobUrl + 'result/');
+  }
+
+  // One file keeps the single-file flow unchanged; two or more are submitted as a batch.
+  function handleFiles(fileList) {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+    if (files.length === 1) extractFile(files[0]); else extractBatch(files);
+  }
+
+  function showError(message) {
+    errorDiv.textContent = '✗ ' + message;
+    errorDiv.style.display = 'block';
+  }
+
+  function batchProblem(files) {
+    if (objectIdInput.value.trim() || objectIdTypeInput.value.trim()) {
+      return 'The object identifier cannot be used with several files; clear it, or upload one file at a time.';
+    }
+    if (maxFilesPerRequest !== null && files.length > maxFilesPerRequest) {
+      return `${files.length} files selected; the maximum per request is ${maxFilesPerRequest}.`;
+    }
+    const total = files.reduce((sum, f) => sum + f.size, 0);
+    if (maxUploadBytes !== null && total > maxUploadBytes) {
+      return `The files total ${fmt_bytes(total)}; the maximum is ${fmt_bytes(maxUploadBytes)}.`;
+    }
+    return null;
+  }
+
+  // The group of one file: filename heading, status line, error banner and a copy of the result cards.
+  function makeGroup(index, name) {
+    const group = document.createElement('section');
+    group.className = 'batch-group';
+    group.id = `batch-group-${index}`;
+    const title = document.createElement('h2');
+    title.className = 'batch-group-title';
+    title.textContent = name;
+    const status = document.createElement('div');
+    status.className = 'batch-status';
+    const error = document.createElement('div');
+    error.className = 'batch-error';
+    const body = RESULT_TEMPLATE.cloneNode(true);
+    [body, ...body.querySelectorAll('[id]')].forEach(el => {
+      if (el.id) { el.setAttribute('data-role', el.id); el.removeAttribute('id'); }
+    });
+    body.style.display = 'none';
+    group.append(title, status, error, body);
+    batchResults.appendChild(group);
+    return { status, error, body };
+  }
+
+  function prepareGroups(files, statusText) {
+    batchResults.innerHTML = '';
+    batchResults.style.display = 'block';
+    return files.map((f, i) => {
+      const g = makeGroup(i, f.name);
+      g.status.textContent = statusText;
+      return g;
+    });
+  }
+
+  function showGroupError(g, message) {
+    g.status.textContent = '';
+    g.error.textContent = '✗ ' + message;
+    g.error.style.display = 'block';
+  }
+
+  function fillGroup(g, file, entry) {
+    if (!g) return;
+    if (entry.result) {
+      g.status.textContent = '';
+      g.error.style.display = 'none';
+      renderResult(file, entry.result, g.body);
+      g.body.style.display = 'block';
+    } else {
+      showGroupError(g, (entry.errors || []).join(' ') || 'This file could not be processed.');
+    }
+  }
+
+  async function runSyncBatch(files, form) {
+    const data = await fetchJson('/api/v1/extract/batch/', { method: 'POST', body: form });
+    const groups = prepareGroups(files, '');
+    (data.results || []).forEach(entry => fillGroup(groups[entry.index], files[entry.index], entry));
+  }
+
+  // Submit one job per file, poll the batch with a growing interval, and fill each file's group from
+  // its own result as soon as that job has finished.
+  async function runAsyncBatch(files, form) {
+    let batch = await fetchJson('/api/v1/jobs/batch/', { method: 'POST', body: form });
+    const batchUrl = `/api/v1/job-batches/${encodeURIComponent(batch.batch_id)}/`;
+    const groups = prepareGroups(files, 'Waiting…');
+    const loaded = new Set();
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    let delay = POLL_START_MS;
+    while (true) {
+      const finished = batch.jobs.filter(j => (j.status === 'succeeded' || j.status === 'failed') && !loaded.has(j.index));
+      finished.forEach(j => loaded.add(j.index));
+      batch.jobs.filter(j => !loaded.has(j.index) && groups[j.index]).forEach(j => { groups[j.index].status.textContent = `Job ${j.status}…`; });
+      await Promise.all(finished.map(j => loadBatchJob(groups[j.index], files[j.index], j)));
+      spinnerText.textContent = `Batch ${batch.status}… ${loaded.size} of ${batch.jobs.length} done`;
+      if (loaded.size >= batch.jobs.length) break;
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for the batch to finish.');
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.5, POLL_MAX_MS);
+      batch = await fetchJson(batchUrl);
+    }
+  }
+
+  async function loadBatchJob(g, file, job) {
+    const jobUrl = `/api/v1/jobs/${encodeURIComponent(job.job_id)}/`;
+    try {
+      if (job.status === 'failed') {
+        const failed = await fetchJson(jobUrl);
+        showGroupError(g, (failed.errors || []).join(' ') || 'The job failed.');
+      } else {
+        fillGroup(g, file, { result: await fetchJson(jobUrl + 'result/') });
+      }
+    } catch (err) {
+      showGroupError(g, err.message || 'Could not load this result.');
+    }
+  }
+
+  async function extractBatch(files) {
+    optionsDiv.style.display = 'none';
+    infoPanel.style.display = 'none';
+    dropZone.style.display = 'none';
+    resultDiv.style.display = 'none';
+    errorDiv.style.display = 'none';
+    tryAgain.style.display = 'none';
+    const problem = batchProblem(files);
+    if (problem) {
+      showError(problem);
+      tryAgain.style.display = 'block';
+      return;
+    }
+    spinner.style.display = 'block';
+
+    const form = new FormData();
+    files.forEach(f => form.append('files', f));
+    if (puidInput.value.trim()) form.append('puid', puidInput.value.trim());
+    if (mimeInput.value.trim()) form.append('mime_type', mimeInput.value.trim());
+
+    try {
+      if (asyncCheckbox.checked) await runAsyncBatch(files, form);
+      else await runSyncBatch(files, form);
+    } catch (err) {
+      showError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      spinner.style.display = 'none';
+      tryAgain.style.display = 'block';
+    }
   }
 
   async function extractFile(file) {
@@ -601,7 +784,7 @@
     return (n/1048576).toFixed(2) + ' MB';
   }
 
-  function renderResult(file, d) {
+  function renderResult(file, d, root = document) {
     const res = d.tool_resolution || {};
     const results = d.results || [];
     const errors = d.errors || [];
@@ -613,23 +796,23 @@
                   : (allOk && !warnings.length) ? 'success' : 'warning';
     const badgeClass = outcome === 'success' ? 'badge-success'
                      : outcome === 'warning' ? 'badge-warning' : 'badge-failure';
-    document.getElementById('result-header').innerHTML =
+    part(root, 'result-header').innerHTML =
       `📋 Extraction Result &nbsp;<span class="badge ${badgeClass}">${outcome}</span>`;
 
     // ── Identified format ────────────────────────────────────────────────────
     const identified = res.puid || res.mime_type;
-    document.getElementById('format-name').textContent =
+    part(root, 'format-name').textContent =
       res.mime_type || res.puid || 'Format not identified';
-    document.getElementById('format-sub').textContent =
+    part(root, 'format-sub').textContent =
       [(SELECTION_DESC[res.selection_method] || res.selection_method) +
          ((res.matched_rules || []).length ? ` (${res.matched_rules.join(', ')})` : ''),
        OUTCOME_DESC[outcome]]
         .filter(Boolean).join(' · ');
 
     // ── Identification service ──────────────────────────────────────────────
-    const idSection = document.getElementById('id-section');
+    const idSection = part(root, 'id-section');
     if (res.identification_url) {
-      document.getElementById('id-source').innerHTML =
+      part(root, 'id-source').innerHTML =
         `<b>Identified by</b> FFIS &nbsp;<code>${esc(res.identification_url)}</code>`;
       idSection.style.display = '';
     } else {
@@ -637,7 +820,7 @@
     }
 
     // ── Identification engines (FFIS provenance) ────────────────────────────
-    const engines = document.getElementById('id-engines');
+    const engines = part(root, 'id-engines');
     engines.innerHTML = '';
     ((d.provenance || {}).ffis?.tools || []).forEach(t => {
       const chip = document.createElement('div');
@@ -650,7 +833,7 @@
     });
 
     // ── Identifier chips ─────────────────────────────────────────────────────
-    const grid = document.getElementById('id-grid');
+    const grid = part(root, 'id-grid');
     grid.innerHTML = '';
     [['PRONOM', res.puid], ['MIME', res.mime_type]].forEach(([scheme, value]) => {
       if (!value) return;
@@ -661,17 +844,17 @@
     });
 
     // ── File meta ────────────────────────────────────────────────────────────
-    document.getElementById('file-meta').innerHTML =
+    part(root, 'file-meta').innerHTML =
       `<span><b>Filename:</b> ${esc(d.filename || file.name)}</span>
        <span><b>Size:</b> ${fmt_bytes(file.size)}</span>
        <span><b>Request:</b> <span style="font-family:monospace;font-size:.82rem">${esc(d.request_id)}</span></span>`;
 
     // ── Errors and warnings ──────────────────────────────────────────────────
-    fillList('errors-card', 'errors-body', errorLabels(d), 'error-item');
-    fillList('warnings-card', 'warnings-body', warnings, 'warning-item');
+    fillList(root, 'errors-card', 'errors-body', errorLabels(d), 'error-item');
+    fillList(root, 'warnings-card', 'warnings-body', warnings, 'warning-item');
 
     // ── Tool breakdown — aligned table + raw output ─────────────────────────
-    const tb = document.getElementById('tool-breakdown');
+    const tb = part(root, 'tool-breakdown');
     tb.innerHTML = '';
 
     const table = document.createElement('table');
@@ -714,14 +897,14 @@
     });
 
     tb.appendChild(table);
-    renderEvent(d.provenance || {});
+    renderEvent(d.provenance || {}, root);
 
-    resultDiv.style.display = 'block';
+    if (root === document) resultDiv.style.display = 'block';
   }
 
   // The PREMIS extraction event and its agents (provenance.event / provenance.agents), all escaped.
-  function renderEvent(prov) {
-    const box = document.getElementById('event-section');
+  function renderEvent(prov, root = document) {
+    const box = part(root, 'event-section');
     const ev = prov.event;
     if (!ev) { box.style.display = 'none'; return; }
     const outcome = (ev.eventOutcomeInformation || [])[0] || {};
@@ -731,7 +914,7 @@
       return `${(a.agentName || [id.agentIdentifierValue]).join(', ')}${a.agentVersion ? ' ' + a.agentVersion : ''}`;
     });
     const object = (ev.linkingObjectIdentifier || [])[0] || {};
-    document.getElementById('event-body').innerHTML =
+    part(root, 'event-body').innerHTML =
       `<div><b>Type</b> ${esc(ev.eventType)}</div>` +
       `<div><b>Date and time</b> ${esc(ev.eventDateTime)}</div>` +
       `<div><b>Outcome</b> ${esc(outcome.eventOutcome)}</div>` +
@@ -748,9 +931,9 @@
     return details.map(e => e.category && e.category !== 'unknown' ? `[${e.category}] ${e.message}` : e.message);
   }
 
-  function fillList(cardId, bodyId, items, itemClass) {
-    const card = document.getElementById(cardId);
-    const body = document.getElementById(bodyId);
+  function fillList(root, cardId, bodyId, items, itemClass) {
+    const card = part(root, cardId);
+    const body = part(root, bodyId);
     if (items.length) {
       body.innerHTML = items.map(m => `<div class="${itemClass}">${esc(m)}</div>`).join('');
       card.style.display = 'block';

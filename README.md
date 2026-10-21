@@ -29,9 +29,12 @@ The service generates its OpenAPI 3 description with Django REST framework's bui
 |---|---|
 | `POST /api/v1/extract/` | Extract metadata from a single uploaded file (multipart: `file`, optional `puid`, `mime_type`, and the paired `object_identifier` and `object_identifier_type`). JSON by default, XML with `Accept: application/xml`. |
 | `POST /api/v1/jobs/` | Optional asynchronous extraction: same multipart body as `/extract/`. Returns `202 Accepted` with a `Location` header and a job envelope (`job_id`, `status`, `created_at`, `errors`). |
+| `POST /api/v1/extract/batch/` | Several files in one request (multipart: the `files` field repeated once per file, optional `puid` and `mime_type` applied to every file; no object identifier). Returns `200` with `{"results": [...]}`: one entry per file, in upload order, with `index`, `filename` and either `result` (exactly what `/extract/` returns for that file) or `errors`. A failing file never affects the others, so a batch with a failed file is still `200`. See "Multiple files per request". |
+| `POST /api/v1/jobs/batch/` | Asynchronous batch: same body as `/extract/batch/`; creates one ordinary job per file. `202 Accepted` with a `Location` header and a batch envelope (`batch_id`, `created_at`, `status`, `jobs`). `503` (no job created) unless every file fits. |
+| `GET /api/v1/job-batches/{batch_id}/` | Batch envelope with the current status of each file's job and an aggregate `status`: `pending`, `running`, `succeeded`, `failed` or `partial` (all finished, some failed). Fetch each file's result from `/api/v1/jobs/{job_id}/result/`. `404` for an unknown or expired batch. |
 | `GET /api/v1/jobs/{job_id}/` | Job envelope; `status` is `pending`, `running`, `succeeded` or `failed` (`errors` is filled when failed). `404` for an unknown or expired job. |
 | `GET /api/v1/jobs/{job_id}/result/` | Exactly the `/extract/` result (JSON, or XML via `Accept`) once the job succeeded. `409` while unfinished or if the job failed; `404` for an unknown or expired job. |
-| `GET /api/v1/limits/` | Deployment limits and features for the UI: `max_upload_bytes`, `async_enabled`. |
+| `GET /api/v1/limits/` | Deployment limits and features for the UI: `max_upload_bytes`, `max_files_per_request`, `async_enabled`. |
 | `GET /api/v1/local-rules/` | The local format rules (see "Local format rules"): `rules` with `name`, `puids`, `extensions`, `tools`, `match` for each, normalised, in file order; `[]` when none are configured. |
 | `GET /api/v1/tools/` | List the tools configured for metadata extraction (name, kind, enabled, mandatory, default, timeout). Invocation details are not exposed. |
 | `GET /api/v1/schema/` | OpenAPI 3 schema (YAML by default; send `Accept: application/vnd.oai.openapi+json` for JSON). |
@@ -39,6 +42,25 @@ The service generates its OpenAPI 3 description with Django REST framework's bui
 | `GET /api/v1/schema/result.json` | JSON Schema of the extraction result. |
 | `GET /api/v1/schema/result.xsd` | XSD of the XML extraction result. |
 | `GET /api/v1/schema/job.json`, `GET /api/v1/schema/job.xsd` | JSON Schema and XSD of the job envelope. |
+| `GET /api/v1/schema/batch.json`, `GET /api/v1/schema/batch.xsd` | JSON Schema and XSD of the `/extract/batch/` response (they reference the result schemas unchanged). |
+| `GET /api/v1/schema/job-batch.json`, `GET /api/v1/schema/job-batch.xsd` | JSON Schema and XSD of the batch envelope of the asynchronous batch routes. |
+
+### Multiple files per request
+
+`POST /api/v1/extract/` stays strictly single-file. To submit several files at once use `POST /api/v1/extract/batch/` (or, with asynchronous processing on, `POST /api/v1/jobs/batch/`): a multipart body with the `files` field repeated once per file.
+
+```bash
+curl -F files=@a.jpg -F files=@b.pdf http://localhost:8000/api/v1/extract/batch/
+```
+
+- Limits: at most `MES_MAX_FILES_PER_REQUEST` files (default 10; more is `400`), and `MES_MAX_UPLOAD_BYTES` applies to the whole request body, so a batch cannot exceed the single-file limit in total (`413`). `max_files_per_request` is reported by `/api/v1/limits/`.
+- `puid` and `mime_type` are optional and apply to every file; without them each file is identified separately. `object_identifier` and `object_identifier_type` are not accepted (`400`): each file's PREMIS event identifies it by type `filename` and the uploaded filename.
+- Files are extracted one after another through the same code as `/extract/`, each with its own `request_id` (`<request id>-<index>`) in the logs and the PREMIS event. Each file is saved to its own temporary path, so equal filenames never clash; the temporary directory is removed when the request ends.
+- A file that cannot be processed (saving it failed, or an unexpected error) gets an `errors` entry in its place; the other files are returned as usual. Problems with the request itself (no files, an empty file, too many files, too large, an object identifier, malformed multipart) make the whole request invalid: `400`/`413` with `{"errors": [...]}`, and nothing is extracted.
+- Metrics count each file as one extraction request. `mes_batch_requests_total{status}` and `mes_batch_files` count the batches and their sizes.
+- Out of scope: unpacking archives (zip/tar) and per-file `puid`/`mime_type`.
+
+**Asynchronous batch.** `POST /api/v1/jobs/batch/` takes the same body and creates **one ordinary job per file**, so each file is stored, run, retained and purged exactly like a single job, and `GET /api/v1/jobs/{job_id}/` and `/result/` work for it unchanged (its result equals the synchronous result for that file). The `202` response carries the batch envelope (`batch_id`, `created_at`, `status`, and `jobs` with `index`, `filename`, `job_id`, `status` per file, in upload order) and `Location: /api/v1/job-batches/{batch_id}/`. Polling that URL returns the same envelope with current statuses; there is no combined result route, so a failed file never hides the others. Admission is all or nothing: if the job store cannot take every file (`MES_ASYNC_MAX_JOBS`), the whole batch is refused with `503` and no job is created. The same request checks apply as for the synchronous batch (for example an empty file is a `400`). A batch record holds only job ids and filenames and is kept in the same job store. A batch lives or expires as a whole: its jobs never expire one by one. It expires `MES_JOB_TTL_SECONDS` after its last job finished (a job that has not finished counts from the batch's creation), and then the batch record and every job, with their uploads, are removed together (also by the purge job); until then every job and the batch answer normally, and afterwards all of them answer `404`. Both routes answer `404` when `MES_ASYNC_ENABLED` is `false`.
 
 ### Asynchronous jobs
 
@@ -80,6 +102,8 @@ MES_JOB_STORE=redis WEB_CONCURRENCY=4 docker compose --profile redis up -d
 | `mes_extract_request_duration_seconds` | Histogram | |
 | `mes_jobs_waiting` | Gauge | |
 | `mes_jobs_waiting_bytes` | Gauge | |
+| `mes_batch_requests_total` | Counter | `status`: `success`, `partial`, `failed`, `rejected`, `accepted` |
+| `mes_batch_files` | Histogram | |
 | `mes_uploaded_file_bytes` | Histogram | |
 | `mes_uploaded_bytes_total` | Counter | |
 | `mes_tool_runs_total` | Counter | `tool`, `status` |
@@ -103,6 +127,7 @@ scrape_configs:
 | Variable | Default | Description |
 |---|---|---|
 | `MES_MAX_UPLOAD_BYTES` | `536870912` (512 MiB) | Largest accepted upload. Larger files get HTTP `413` and no tool runs. |
+| `MES_MAX_FILES_PER_REQUEST` | `10` | Most files in one batch request (integer ≥ 1; invalid values stop startup); more get HTTP `400`. `MES_MAX_UPLOAD_BYTES` applies to the whole batch. |
 | `MES_MAX_CONCURRENT_TOOLS` | `4` | Tools run concurrently within one request (integer ≥ 1; invalid values stop startup). Worst case in total is gunicorn workers × this value, so size it to the container's CPU/memory. |
 | `MES_TOOL_RULES_FILE` | `config/tool_rules.yaml` | YAML file with local format rules (see "Local format rules"). Relative paths resolve against the `service` directory. A missing file means no rules; an invalid file stops startup. |
 | `MES_ASYNC_ENABLED` | `true` | Set to `false` to turn asynchronous processing off: `/api/v1/jobs/…` answers `404` and the UI hides "Process asynchronously". `/api/v1/extract/` is unaffected. |

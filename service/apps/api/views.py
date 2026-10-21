@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import tempfile
@@ -10,9 +11,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.conf import settings
+from django.urls import reverse
 
 from apps.api.jobs import JobStatus, JobStoreFull, get_job_service
 from apps.api.openapi import (
+    BatchExtractAutoSchema,
+    BatchJobStatusAutoSchema,
+    BatchJobSubmitAutoSchema,
     ExtractAutoSchema,
     JobResultAutoSchema,
     JobStatusAutoSchema,
@@ -22,16 +27,23 @@ from apps.api.openapi import (
     ToolsAutoSchema,
 )
 from apps.api.serializers import (
+    BatchExtractionRequestSerializer,
     ExtractionRequestSerializer,
     PayloadTooLarge,
     check_declared_length,
     serialize_extraction_result,
     serialize_job,
+    serialize_job_batch,
 )
+from apps.api.uploads import save_upload
+from apps.extraction.exceptions import ToolNotConfigured
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
 from apps.extraction.tool_config import list_tool_configs
 from apps.extraction.tool_rules import load_tool_rules
 from apps.metrics import metrics
+
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncDisabled(NotFound):
@@ -74,13 +86,8 @@ class ExtractMetadataView(RequestIdMixin, APIView):
             upload = data["file"]
             metrics.record_upload(upload.size)
 
-            # Keep the original suffix: some tools rely on the extension.
-            suffix = os.path.splitext(upload.name)[1]
             with tempfile.TemporaryDirectory(dir=settings.MES_JOB_UPLOAD_DIR) as tmp_dir:
-                path = os.path.join(tmp_dir, f"upload{suffix}")
-                with open(path, "wb") as handle:
-                    for chunk in upload.chunks():
-                        handle.write(chunk)
+                path = save_upload(upload, tmp_dir)
                 result = ExtractionOrchestrator().extract(
                     path,
                     puid=data.get("puid") or None,
@@ -102,6 +109,77 @@ class ExtractMetadataView(RequestIdMixin, APIView):
             )
         finally:
             metrics.record_request(outcome, time.perf_counter() - started)
+
+
+class BatchExtractMetadataView(RequestIdMixin, APIView):
+    """POST /api/v1/extract/batch/ — extract metadata from several uploaded files, one after another.
+
+    Every file goes through the same extraction as `/extract/`, so its entry equals what that route
+    returns for it. A file that cannot be processed gets an `errors` entry in its place; the others
+    are unaffected, so the response is `200` whenever the request itself was acceptable.
+    """
+
+    schema = BatchExtractAutoSchema()
+
+    def post(self, request):
+        try:
+            check_declared_length(request.META.get("CONTENT_LENGTH"))
+            serializer = BatchExtractionRequestSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+        except (ValidationError, PayloadTooLarge):
+            metrics.record_batch("rejected")
+            raise
+        data = serializer.validated_data
+        uploads = data["files"]
+
+        entries = []
+        with tempfile.TemporaryDirectory(dir=settings.MES_JOB_UPLOAD_DIR) as work_dir:
+            for index, upload in enumerate(uploads):
+                entries.append(
+                    self._extract_one(
+                        request,
+                        work_dir,
+                        index,
+                        upload,
+                        puid=data.get("puid") or None,
+                        mime_type=data.get("mime_type") or None,
+                    )
+                )
+        metrics.record_batch(metrics.classify_batch(entries), len(entries))
+        return Response({"results": entries})
+
+    @staticmethod
+    def _extract_one(request, work_dir, index, upload, *, puid, mime_type) -> dict:
+        started = time.perf_counter()
+        outcome = "error"
+        entry = {"index": index, "filename": upload.name}
+        request_id = f"{request.mes_request_id}-{index}"
+        extra = {"request_id": request_id}
+        try:
+            metrics.record_upload(upload.size)
+            # One directory per file, so equal filenames can never share a path.
+            file_dir = os.path.join(work_dir, str(index))
+            os.mkdir(file_dir)
+            path = save_upload(upload, file_dir)
+            result = ExtractionOrchestrator().extract(
+                path,
+                puid=puid,
+                mime_type=mime_type,
+                request_id=request_id,
+                filename=upload.name,
+            )
+            metrics.record_tool_results(result.results)
+            outcome = metrics.classify_outcome(result)
+            entry["result"] = serialize_extraction_result(result, request_id, upload.name)
+        except ToolNotConfigured as exc:
+            logger.error("tool not configured: %s", exc, extra=extra)
+            entry["errors"] = [str(exc)]
+        except Exception:
+            logger.exception("Unhandled error while extracting a file of a batch", extra=extra)
+            entry["errors"] = ["An unexpected error occurred while processing the file."]
+        finally:
+            metrics.record_request(outcome, time.perf_counter() - started)
+        return entry
 
 
 class JobsAtCapacity(APIException):
@@ -132,10 +210,7 @@ class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
         # Kept until the job finishes (the job removes it); removed here if it is never queued.
         work_dir = tempfile.mkdtemp(dir=settings.MES_JOB_UPLOAD_DIR)
         try:
-            path = os.path.join(work_dir, f"upload{os.path.splitext(upload.name)[1]}")
-            with open(path, "wb") as handle:
-                for chunk in upload.chunks():
-                    handle.write(chunk)
+            path = save_upload(upload, work_dir)
             record = get_job_service().submit(
                 file_path=path,
                 work_dir=work_dir,
@@ -157,6 +232,72 @@ class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
             status=status.HTTP_202_ACCEPTED,
             headers={"Location": f"{request.path.rstrip('/')}/{record.job_id}/"},
         )
+
+
+class BatchJobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
+    """POST /api/v1/jobs/batch/ — queue one ordinary job per uploaded file, all or none."""
+
+    schema = BatchJobSubmitAutoSchema()
+
+    def post(self, request):
+        try:
+            check_declared_length(request.META.get("CONTENT_LENGTH"))
+            serializer = BatchExtractionRequestSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+        except (ValidationError, PayloadTooLarge):
+            metrics.record_batch("rejected")
+            raise
+        data = serializer.validated_data
+
+        # One work dir per file: each job owns its upload and removes it when it finishes.
+        work_dirs = []
+        try:
+            items = []
+            for upload in data["files"]:
+                work_dir = tempfile.mkdtemp(dir=settings.MES_JOB_UPLOAD_DIR)
+                work_dirs.append(work_dir)
+                items.append(
+                    {
+                        "file_path": save_upload(upload, work_dir),
+                        "work_dir": work_dir,
+                        "filename": upload.name,
+                        "size_bytes": upload.size,
+                    }
+                )
+            batch, records = get_job_service().submit_batch(
+                items,
+                puid=data.get("puid") or None,
+                mime_type=data.get("mime_type") or None,
+                request_id=request.mes_request_id,
+            )
+        except BaseException as exc:
+            # Nothing was queued (the service raises before it takes ownership of any upload).
+            for work_dir in work_dirs:
+                shutil.rmtree(work_dir, ignore_errors=True)
+            metrics.record_batch("rejected")
+            if isinstance(exc, JobStoreFull):
+                raise JobsAtCapacity() from exc
+            raise
+        for upload in data["files"]:
+            metrics.record_upload(upload.size)
+        metrics.record_batch("accepted", len(records))
+        return Response(
+            serialize_job_batch(batch, records),
+            status=status.HTTP_202_ACCEPTED,
+            headers={"Location": reverse("api:job-batch-status", args=[batch.batch_id])},
+        )
+
+
+class BatchJobStatusView(AsyncEnabledMixin, RequestIdMixin, APIView):
+    """GET /api/v1/job-batches/{batch_id}/ — the batch with the current status of each file's job."""
+
+    schema = BatchJobStatusAutoSchema()
+
+    def get(self, request, batch_id):
+        found = get_job_service().get_batch(batch_id)
+        if found is None:
+            raise NotFound("No such batch; it may have expired.")
+        return Response(serialize_job_batch(*found))
 
 
 def _get_job_or_404(job_id):
@@ -241,6 +382,7 @@ class LimitsView(APIView):
         return Response(
             {
                 "max_upload_bytes": settings.MES_MAX_UPLOAD_BYTES,
+                "max_files_per_request": settings.MES_MAX_FILES_PER_REQUEST,
                 "async_enabled": settings.MES_ASYNC_ENABLED,
             }
         )

@@ -34,6 +34,15 @@ def validate_upload_limit_config() -> None:
         )
 
 
+def validate_files_per_request_config() -> None:
+    """`MES_MAX_FILES_PER_REQUEST` must be a positive integer; checked at startup."""
+    value = getattr(settings, "MES_MAX_FILES_PER_REQUEST", None)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ImproperlyConfigured(
+            f"settings.MES_MAX_FILES_PER_REQUEST must be an integer >= 1, got {value!r}."
+        )
+
+
 def check_declared_length(content_length) -> None:
     """Reject a request whose declared body size cannot fit the upload limit.
 
@@ -78,6 +87,67 @@ class ExtractionRequestSerializer(serializers.Serializer):
                 f"The uploaded file is {value.size} bytes, which exceeds the maximum of {limit} bytes."
             )
         return value
+
+
+class BatchExtractionRequestSerializer(serializers.Serializer):
+    """Several files in one request: the `files` field repeated once per file.
+
+    `puid` and `mime_type` apply to every file. There is no object identifier, so each file's
+    PREMIS event identifies its object by filename. An empty file makes the whole request invalid
+    (as on the single-file routes), so it is refused before anything is extracted or queued.
+    """
+
+    files = serializers.ListField(child=serializers.FileField(allow_empty_file=True))
+    puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate(self, attrs):
+        # Blank counts as not supplied (multipart forms send empty fields), as on the single route.
+        for name in ("object_identifier", "object_identifier_type"):
+            if self.initial_data.get(name):
+                raise serializers.ValidationError(
+                    {name: "Not accepted on the batch route; each file is identified by its filename."}
+                )
+        return attrs
+
+    def validate_files(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one file is required.")
+        empty = [upload.name for upload in value if upload.size == 0]
+        if empty:
+            raise serializers.ValidationError(f"The uploaded file is empty: {', '.join(empty)}.")
+        max_files = settings.MES_MAX_FILES_PER_REQUEST
+        if len(value) > max_files:
+            raise serializers.ValidationError(
+                f"{len(value)} files were uploaded, which exceeds the maximum of {max_files} per request."
+            )
+        total = sum(upload.size for upload in value)
+        limit = settings.MES_MAX_UPLOAD_BYTES
+        if total > limit:
+            raise PayloadTooLarge(
+                f"The uploaded files total {total} bytes, which exceeds the maximum of {limit} bytes."
+            )
+        return value
+
+
+def serialize_job_batch(batch, jobs) -> dict:
+    """The batch envelope of the `/api/v1/jobs/batch/` and `/api/v1/job-batches/` endpoints."""
+    from apps.api.jobs import aggregate_batch_status
+
+    return {
+        "batch_id": batch.batch_id,
+        "created_at": batch.created_at.isoformat(),
+        "status": aggregate_batch_status(job.status for job in jobs),
+        "jobs": [
+            {
+                "index": entry["index"],
+                "filename": entry["filename"],
+                "job_id": entry["job_id"],
+                "status": job.status.value,
+            }
+            for entry, job in zip(batch.jobs, jobs)
+        ],
+    }
 
 
 def serialize_job(record) -> dict:

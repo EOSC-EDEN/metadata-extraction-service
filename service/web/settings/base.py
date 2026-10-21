@@ -233,6 +233,10 @@ MES_MAX_CONCURRENT_TOOLS = int(os.environ.get("MES_MAX_CONCURRENT_TOOLS", "4"))
 # Larger files are rejected with HTTP 413 before any tool runs.
 MES_MAX_UPLOAD_BYTES = int(os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024 * 1024)))
 
+# Most files accepted by one batch request (POST /api/v1/extract/batch/), a positive integer
+# validated at startup. MES_MAX_UPLOAD_BYTES applies to the whole batch body, not per file.
+MES_MAX_FILES_PER_REQUEST = int(os.environ.get("MES_MAX_FILES_PER_REQUEST", "10"))
+
 # Asynchronous extraction (POST /api/v1/jobs/) can be switched off: the jobs endpoints then
 # answer 404 and the UI hides its "Process asynchronously" option.
 MES_ASYNC_ENABLED = _env_flag("MES_ASYNC_ENABLED", "true")

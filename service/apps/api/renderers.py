@@ -14,6 +14,8 @@ from rest_framework.renderers import BaseRenderer
 
 NAMESPACE = "urn:eden:mes:result:1"
 JOB_NAMESPACE = "urn:eden:mes:job:1"
+BATCH_NAMESPACE = "urn:eden:mes:batch:1"
+JOB_BATCH_NAMESPACE = "urn:eden:mes:job-batch:1"
 PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
 
 _INVALID_XML_CHARS = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
@@ -169,7 +171,40 @@ def build_result_element(data: dict) -> ET.Element:
     return root
 
 
+def build_batch_element(data: dict) -> ET.Element:
+    """The batch response; its own namespace (mes-batch.xsd), wrapping the unchanged result elements."""
+    root = ET.Element(f"{{{BATCH_NAMESPACE}}}batch")
+    for entry in data["results"]:
+        item = ET.SubElement(root, f"{{{BATCH_NAMESPACE}}}entry")
+        ET.SubElement(item, f"{{{BATCH_NAMESPACE}}}index").text = str(entry["index"])
+        _set_text(ET.SubElement(item, f"{{{BATCH_NAMESPACE}}}filename"), entry["filename"])
+        if "result" in entry:
+            item.append(build_result_element(entry["result"]))
+        else:
+            errors = ET.SubElement(item, f"{{{BATCH_NAMESPACE}}}errors")
+            for message in entry["errors"]:
+                _set_text(ET.SubElement(errors, _q("item")), message)
+    return root
+
+
+def build_job_batch_element(data: dict) -> ET.Element:
+    """The async batch envelope; its own namespace (mes-job-batch.xsd)."""
+    ns = f"{{{JOB_BATCH_NAMESPACE}}}"
+    root = ET.Element(f"{ns}jobBatch")
+    for name, key in (("batchId", "batch_id"), ("createdAt", "created_at"), ("status", "status")):
+        ET.SubElement(root, f"{ns}{name}").text = str(data[key])
+    jobs = ET.SubElement(root, f"{ns}jobs")
+    for entry in data["jobs"]:
+        job = ET.SubElement(jobs, f"{ns}job")
+        ET.SubElement(job, f"{ns}index").text = str(entry["index"])
+        _set_text(ET.SubElement(job, f"{ns}filename"), entry["filename"])
+        ET.SubElement(job, f"{ns}jobId").text = str(entry["job_id"])
+        ET.SubElement(job, f"{ns}status").text = str(entry["status"])
+    return root
+
+
 _JOB_KEYS = {"job_id", "status", "created_at", "errors"}
+_JOB_BATCH_KEYS = {"batch_id", "status", "created_at", "jobs"}
 
 
 def build_job_element(data: dict) -> ET.Element:
@@ -194,6 +229,16 @@ class MESXMLRenderer(BaseRenderer):
         if isinstance(data, dict) and _JOB_KEYS <= data.keys():
             ET.register_namespace("", JOB_NAMESPACE)
             return ET.tostring(build_job_element(data), encoding="utf-8", xml_declaration=True)
+        if isinstance(data, dict) and data.keys() == _JOB_BATCH_KEYS:
+            ET.register_namespace("", JOB_BATCH_NAMESPACE)
+            ET.register_namespace("r", NAMESPACE)
+            return ET.tostring(build_job_batch_element(data), encoding="utf-8", xml_declaration=True)
+        if isinstance(data, dict) and data.keys() == {"results"}:
+            # A batch has only `results`; a single result always carries more (request_id, ...).
+            ET.register_namespace("", BATCH_NAMESPACE)
+            ET.register_namespace("r", NAMESPACE)
+            ET.register_namespace("premis", PREMIS_NAMESPACE)
+            return ET.tostring(build_batch_element(data), encoding="utf-8", xml_declaration=True)
         if not (isinstance(data, dict) and "results" in data):
             # Error payloads ({"errors": [...]}, DRF field errors) have no result schema.
             return self._render_error(data)
