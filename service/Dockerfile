@@ -19,14 +19,18 @@ ARG INSTALL_METAFLAC=false
 ARG INSTALL_FILE_SCRAPER=false
 # Pinned sources for File Scraper; override with --build-arg. FILE_SCRAPER_REF and the
 # DPRES_*_REF values are git refs (use tags or commit hashes for reproducible builds).
-ARG FILE_SCRAPER_REF=master
-ARG DPRES_REF=master
+ARG FILE_SCRAPER_REF=v3.2.4
+ARG DPRES_FILE_FORMATS_REF=v1.5.0
+ARG DPRES_FIDO_REF=v1.4.0-dpres8
+ARG DPRES_DPX_VALIDATOR_REF=v1.0.2
+ARG DPRES_XML_HELPERS_REF=v1.0.0
+ARG DPRES_FFMPEG_PYTHON_REF=0.2.0
 ARG JHOVE_JAR_URL=https://software.openpreservation.org/rel/jhove-latest.jar
 ARG VERAPDF_VERSION=1.30.3
-ARG VNU_VERSION=latest
+ARG VNU_VERSION=20.6.30
 ARG DBPTK_VERSION=4.4.1
 ARG WARCHAEOLOGY_VERSION=5.0.0
-ARG SCHEMATRON_REF=master
+ARG SCHEMATRON_REF=v0.6
 
 RUN set -eu; \
     packages=""; \
@@ -56,11 +60,11 @@ RUN set -eu; \
     if [ "$INSTALL_FILE_SCRAPER" = "true" ]; then \
         python -m venv /opt/file-scraper; \
         /opt/file-scraper/bin/pip install --no-cache-dir \
-            "git+https://github.com/Digital-Preservation-Finland/dpres-file-formats@${DPRES_REF}" \
-            "git+https://github.com/Digital-Preservation-Finland/fido@${DPRES_REF}" \
-            "git+https://github.com/Digital-Preservation-Finland/dpx-validator@${DPRES_REF}" \
-            "git+https://github.com/Digital-Preservation-Finland/xml-helpers@${DPRES_REF}" \
-            "git+https://github.com/Digital-Preservation-Finland/ffmpeg-python@${DPRES_REF}" \
+            "git+https://github.com/Digital-Preservation-Finland/dpres-file-formats@${DPRES_FILE_FORMATS_REF}" \
+            "git+https://github.com/Digital-Preservation-Finland/fido@${DPRES_FIDO_REF}" \
+            "git+https://github.com/Digital-Preservation-Finland/dpx-validator@${DPRES_DPX_VALIDATOR_REF}" \
+            "git+https://github.com/Digital-Preservation-Finland/xml-helpers@${DPRES_XML_HELPERS_REF}" \
+            "git+https://github.com/Digital-Preservation-Finland/ffmpeg-python@${DPRES_FFMPEG_PYTHON_REF}" \
             "git+https://github.com/Digital-Preservation-Finland/file-scraper@${FILE_SCRAPER_REF}"; \
         ln -s /opt/file-scraper/bin/scraper /usr/local/bin/scraper; \
         mkdir -p /etc/file-scraper; \

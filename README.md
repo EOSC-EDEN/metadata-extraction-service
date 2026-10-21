@@ -4,7 +4,7 @@ An extensible metadata extraction service that combines multiple extraction tool
 
 ## Status
 
-This repository currently holds a **draft specification**, open for review by EDEN technical working groups. It does not yet contain an implementation.
+This repository holds a **draft specification**, open for review by EDEN technical working groups, and a work-in-progress implementation of it in `service/`. The implementation does not yet cover everything in the specification: see "Not yet supported" in [`docs/use-cases.md`](docs/use-cases.md) for the gaps.
 
 ## About
 
@@ -12,9 +12,9 @@ The Metadata Extraction Service (MES) is being developed as part of EOSC EDEN, i
 
 No single extraction tool can capture all relevant internal metadata for the diverse range of file formats managed by a Trusted Digital Archive. MES addresses this by:
 
-- Selecting and invoking one or more metadata extraction tools appropriate to a file's format, using file format identification (PRONOM PUID / MIME type) and File Format Libraries like [KU Leuven File Format Library](https://github.com/libis/teneo-format_library).
+- Invoking one or more metadata extraction tools for a file. Today every enabled tool runs, or the tools named by local format rules (matching a PUID or file extension) plus the default tool. The caller can supply a PUID or MIME type, or the service can identify the file through FFIS. Selection through a File Format Library such as the [KU Leuven File Format Library](https://github.com/libis/teneo-format_library) is planned but not implemented.
 - Aggregating the raw, unmodified output of each tool, labelled with the tool that produced it and its execution status.
-- Returning results through a standardised REST API, in both XML and JSON, for a single file or a full Submission/Archival Information Package (per the [SIP2AIP Factory specification](https://github.com/EOSC-EDEN/wp2-oais-packaging-information)).
+- Returning results through a standardised REST API, in both XML and JSON, for one or more files per request. Extraction from a whole Submission/Archival Information Package (per the [SIP2AIP Factory specification](https://github.com/EOSC-EDEN/wp2-oais-packaging-information)) is not implemented yet.
 - Supporting extensibility, so new extraction tools can be added behind adapters without changing the core wrapper logic.
 
 Supported tool integrations are ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac (FLAC only), File Scraper (CLI, opt-in), and Apache Tika.

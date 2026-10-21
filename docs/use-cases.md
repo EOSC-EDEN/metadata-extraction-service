@@ -282,7 +282,7 @@ C2 and C3 are described under the curator. They are shown here because P2 builds
 
 ## Format Library use cases (planned)
 
-The File Format Library (for example the KU Leuven/Teneo `teneo-format_library`) links a file format to the extraction tools that suit it. The integration is not available yet. Until it is, the default tool is used. The use cases are listed here so the integration is built toward them.
+The File Format Library (for example the KU Leuven/Teneo `teneo-format_library`) links a file format to the extraction tools that suit it. The integration is not available yet. Until it is, every request runs all enabled tools (the default tool first), unless a local format rule selects tools (see "Local format rules" in the README). The use cases are listed here so the integration is built toward them.
 
 ```mermaid
 flowchart LR
@@ -358,8 +358,14 @@ F4 is drawn outside the system boundary because the curator does it in the Forma
 ## Not yet supported
 
 - Extraction from a whole SIP or AIP (MES-REQ-2-003, MES-REQ-1-003). The service accepts one file per request.
-- File Scraper (MES-REQ-4-004). ExifTool and MediaInfo are enabled by default. FFprobe, ImageMagick and Tika are available but must be switched on by the operator.
-- Tool selection from a Format Library (MES-REQ-1-002, MES-REQ-3-009), described in F1–F4. Format identification through FFIS is implemented.
+- Tool selection from a Format Library (MES-REQ-1-002, MES-REQ-3-009), described in F1–F4. Format identification through FFIS is implemented, and operators can link PUIDs and file extensions to tools with local format rules. As a result the output does not state which Format Library selected the tools.
+- Tool selection by MIME type (MES-REQ-1-004, MES-REQ-2-007). The API accepts `mime_type` and `puid`, but local format rules match only on PUID and file extension. Without a matching rule, every enabled tool runs whatever identifier was supplied.
+- Authentication (MES-REQ-1-006). The API is open; restrict access outside the service (for example in a gateway).
+- A complete PREMIS object characteristic (MES-REQ-2-009). The service returns the PREMIS event and agents only.
+- Labelling extracted metadata with its metadata type and standard (MES-REQ-3-005). Each result carries only its tool and raw output format (`json` or `text`).
+- The Archivematica characterisation-command mode (MES-REQ-6-001 to MES-REQ-6-012). The service has no command-line mode that writes XML to standard output and signals failure through its exit status.
+
+Available but not on by default: ExifTool and MediaInfo are enabled by default. FFprobe, ImageMagick, File Scraper (MES-REQ-4-004) and Tika are implemented but must be switched on by the operator.
 
 ## Traceability
 

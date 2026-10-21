@@ -68,7 +68,7 @@ Within the EOSC EDEN architecture, the Metadata Extraction Service therefore ser
 - {{ MES-REQ-1-001 }} The service MUST be able to set a default tool to extract metadata from submitted files
 - {{ MES-REQ-1-002 }} The service SHOULD make use of one or more Format Libraries[^2] to determine which metadata extraction tool to use[^3]
 - {{ MES-REQ-1-003 }} The service MAY be able to extract metadata based on the SIP & AIP Specification of the SIP2AIP Factory[^4]
-- {{ MES-REQ-1-004 }} The service MUST support mapping an identified file-format identifier, including a PRONOM PUID and/or mime types where available, to one or more configured metadata extraction tools.
+- {{ MES-REQ-1-004 }} The service MUST support mapping an identified file-format identifier, including a PRONOM PUID and/or file extension where available, to one or more configured metadata extraction tools.
 - {{ MES-REQ-1-005 }} The service MUST support  invocation through a local cli and/or (externally) hosted services to extract metadata
 - {{ MES-REQ-1-006 }} The service MAY support EOSC AAI indicated authentication methods such as OpenIDConnect and/or OAuth2
 
