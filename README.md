@@ -130,6 +130,7 @@ scrape_configs:
 | `MES_MAX_FILES_PER_REQUEST` | `10` | Most files in one batch request (integer ≥ 1; invalid values stop startup); more get HTTP `400`. `MES_MAX_UPLOAD_BYTES` applies to the whole batch. |
 | `MES_MAX_CONCURRENT_TOOLS` | `4` | Tools run concurrently within one request (integer ≥ 1; invalid values stop startup). Worst case in total is gunicorn workers × this value, so size it to the container's CPU/memory. |
 | `MES_TOOL_RULES_FILE` | `config/tool_rules.yaml` | YAML file with local format rules (see "Local format rules"). Relative paths resolve against the `service` directory. A missing file means no rules; an invalid file stops startup. |
+| `MES_FOOTER_TEXT` | empty | Small plain text shown in the web UI footer. Empty shows nothing. |
 | `MES_ASYNC_ENABLED` | `true` | Set to `false` to turn asynchronous processing off: `/api/v1/jobs/…` answers `404` and the UI hides "Process asynchronously". `/api/v1/extract/` is unaffected. |
 | `MES_ASYNC_MAX_WORKERS` | `2` | Background threads running asynchronous jobs (integer ≥ 1). |
 | `MES_ASYNC_MAX_JOBS` | `100` | Most jobs held at once; further submissions get HTTP `503` (integer ≥ 1). |

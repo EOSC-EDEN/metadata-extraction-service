@@ -139,6 +139,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 #   enabled             disabled tools are never selected
 #   mandatory           failure surfaces a top-level error (MES-REQ-3-006)
 
+
 def _env_flag(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).lower() in ("1", "true", "yes")
 
@@ -210,7 +211,7 @@ MES_TOOLS = {
         "kind": "http",
         # Base URL of a running Tika server (https://tika.apache.org/).
         "invocation_command": os.environ.get("MES_TIKA_URL", "http://localhost:9998"),
-        "timeout_seconds": 60,
+        "timeout_seconds": 120,
         "enabled": _env_flag("MES_TIKA_ENABLED"),
         "mandatory": False,
     },
@@ -231,7 +232,9 @@ MES_MAX_CONCURRENT_TOOLS = int(os.environ.get("MES_MAX_CONCURRENT_TOOLS", "4"))
 
 # Largest accepted upload, in bytes (a positive integer, validated at startup).
 # Larger files are rejected with HTTP 413 before any tool runs.
-MES_MAX_UPLOAD_BYTES = int(os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024 * 1024)))
+MES_MAX_UPLOAD_BYTES = int(
+    os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024 * 1024))
+)
 
 # Most files accepted by one batch request (POST /api/v1/extract/batch/), a positive integer
 # validated at startup. MES_MAX_UPLOAD_BYTES applies to the whole batch body, not per file.
@@ -262,9 +265,16 @@ MES_JOB_UPLOAD_DIR = os.environ.get("MES_JOB_UPLOAD_DIR", "/var/lib/mes/uploads"
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 
+# Optional small note shown in the UI footer (e.g. a funding acknowledgement). Plain text.
+MES_FOOTER_TEXT = os.environ.get("MES_FOOTER_TEXT", "")
+
 # File Format Identification Service (FFIS, https://github.com/EOSC-EDEN/eosc-ffis).
 # Called only when a request supplies neither a PUID nor a MIME type.
-MES_FFIS_ENABLED = os.environ.get("MES_FFIS_ENABLED", "false").lower() in ("1", "true", "yes")
+MES_FFIS_ENABLED = os.environ.get("MES_FFIS_ENABLED", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 MES_FFIS_BASE_URL = os.environ.get("MES_FFIS_BASE_URL", "")
 MES_FFIS_TIMEOUT_SECONDS = int(os.environ.get("MES_FFIS_TIMEOUT_SECONDS", "30"))
 # FFIS's OpenAPI schema doesn't enumerate Identifier.scheme values; confirm

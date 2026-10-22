@@ -1,4 +1,4 @@
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 # Element ids the FFIS page defines; the MES page must keep the same skeleton.
 FFIS_IDS = [
@@ -13,36 +13,36 @@ class UiTests(SimpleTestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/html; charset=utf-8")
-        html = b"".join(response.streaming_content).decode()
+        html = response.content.decode()
         self.assertIn("Metadata Extraction", html)
         self.assertIn("/api/v1/extract/", html)
 
     def test_page_keeps_the_ffis_skeleton(self):
-        html = b"".join(self.client.get("/").streaming_content).decode()
+        html = self.client.get("/").content.decode()
         for element_id in FFIS_IDS:
             self.assertIn(f'id="{element_id}"', html, element_id)
 
     def test_page_has_optional_puid_and_mime_inputs(self):
-        html = b"".join(self.client.get("/").streaming_content).decode()
+        html = self.client.get("/").content.decode()
         self.assertIn('id="puid-input"', html)
         self.assertIn('id="mime-input"', html)
 
     def test_page_has_object_identifier_inputs_and_event_section(self):
-        html = b"".join(self.client.get("/").streaming_content).decode()
+        html = self.client.get("/").content.decode()
         for element_id in ("object-id-input", "object-id-type-input", "event-section", "event-body"):
             self.assertIn(f'id="{element_id}"', html, element_id)
         self.assertIn("'object_identifier'", html)
         self.assertIn("'object_identifier_type'", html)
 
     def test_page_has_service_info_panel(self):
-        html = b"".join(self.client.get("/").streaming_content).decode()
+        html = self.client.get("/").content.decode()
         for element_id in ("info-panel", "limit-text", "tool-chips"):
             self.assertIn(f'id="{element_id}"', html, element_id)
         self.assertIn("/api/v1/limits/", html)
         self.assertIn("/api/v1/tools/", html)
 
     def test_page_has_async_option_and_jobs_endpoint(self):
-        html = b"".join(self.client.get("/").streaming_content).decode()
+        html = self.client.get("/").content.decode()
         self.assertIn('id="async-checkbox"', html)
         self.assertIn("/api/v1/jobs/", html)
         # Hidden until the service reports that async processing is enabled.
@@ -52,7 +52,7 @@ class UiTests(SimpleTestCase):
         self.assertIn("/api/v1/extract/", html)
 
     def _html(self):
-        return b"".join(self.client.get("/").streaming_content).decode()
+        return self.client.get("/").content.decode()
 
     def test_file_input_accepts_several_files(self):
         import re
@@ -103,3 +103,23 @@ class UiTests(SimpleTestCase):
 
     def test_post_not_allowed(self):
         self.assertEqual(self.client.post("/").status_code, 405)
+
+
+class FooterTextTests(SimpleTestCase):
+    def _html(self):
+        return self.client.get("/").content.decode()
+
+    @override_settings(MES_FOOTER_TEXT="")
+    def test_no_footer_note_when_unset(self):
+        html = self._html()
+        self.assertNotIn("footer-note", html.split("<footer>")[1])
+        self.assertNotIn("FOOTER_TEXT", html)
+
+    @override_settings(MES_FOOTER_TEXT="This project has received support from the EOSC EU Node")
+    def test_footer_note_is_shown_in_footer(self):
+        footer = self._html().split("<footer>")[1].split("</footer>")[0]
+        self.assertIn("This project has received support from the EOSC EU Node", footer)
+
+    @override_settings(MES_FOOTER_TEXT="<script>x</script>")
+    def test_footer_note_is_escaped(self):
+        self.assertNotIn("<script>x</script>", self._html())

@@ -1,4 +1,4 @@
-# Metadata Extraction Service Specification
+# Metadata Extraction Service Specification[^7]
 
 ## Abstract
 To improve and support preservation planning, file migration, and other preservation and access operations, the need was identified for a service which extracts metadata. 
@@ -172,3 +172,5 @@ Implementations should avoid hard-coding assumptions about ExifTool and MediaInf
 ## Traceability to EOSC EDEN Requirements
 ### QUALITY-TECHNICAL-REQ-016 (Mandatory)
 *Significant properties must be able to be recorded as technical metadata. Addressed by: MES-REQ-3-001*
+
+[^7]: This project has received support from the EOSC EU Node
