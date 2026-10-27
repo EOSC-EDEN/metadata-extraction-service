@@ -4,7 +4,7 @@
 To improve and support preservation planning, file migration, and other preservation and access operations, the need was identified for a service which extracts metadata. 
 
 ## Status of This Document
-This document is a proposed specification. It is currently a draft and open for review by EDEN technical working groups.
+This document is a proposed specification for EOSC EDEN. It is currently open for review by the public.
 
 ## Rationale
 The Metadata Extraction Service provides standardised, interoperable metadata describing the properties of digital files. This metadata is essential for supporting digital preservation activities, including preservation planning, file format transformation, file repair, creation of derivatives, and many other domain-specific operations. Because metadata requirements  differ across file types, specialised metadata standards exist for different domains (e.g., NISOIMG (MIX) for images and audioMD for audio content). In most cases though, metadata extractors do not use standardised metadata schemes and develop their own output format.
