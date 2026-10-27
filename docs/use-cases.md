@@ -282,7 +282,7 @@ C2 and C3 are described under the curator. They are shown here because P2 builds
 
 ## Format Library use cases (planned)
 
-The File Format Library (for example the KU Leuven/Teneo `teneo-format_library`) links a file format to the extraction tools that suit it. The integration is not available yet. Until it is, every request runs all enabled tools (the default tool first), unless a local format rule selects tools (see "Local format rules" in the README). The use cases are listed here so the integration is built toward them.
+The File Format Library (for example the KU Leuven/Teneo `teneo-format_library`) links a file format to the extraction tools that suit it. The integration is not available yet. Until it is, every request runs all enabled tools (the default tool first), unless a local format rule selects tools (see [Configure local format rules](mkdocs/how-to/local-format-rules.md)). The use cases are listed here so the integration is built toward them.
 
 ```mermaid
 flowchart LR

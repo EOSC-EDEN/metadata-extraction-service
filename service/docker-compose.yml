@@ -7,6 +7,7 @@ x-mes-environment: &mes-environment
   MES_FFIS_BASE_URL: ${MES_FFIS_BASE_URL:-}
   MES_FFIS_TIMEOUT_SECONDS: ${MES_FFIS_TIMEOUT_SECONDS:-30}
   MES_FOOTER_TEXT: ${MES_FOOTER_TEXT:-}
+  MES_DOCS_URL: ${MES_DOCS_URL:-}
   MES_TOOL_RULES_FILE: ${MES_TOOL_RULES_FILE:-config/tool_rules.yaml}
   MES_MAX_UPLOAD_BYTES: ${MES_MAX_UPLOAD_BYTES:-536870912}
   MES_MAX_FILES_PER_REQUEST: ${MES_MAX_FILES_PER_REQUEST:-10}
@@ -41,6 +42,9 @@ services:
       # it can be raised.
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      # ExifTool and MediaInfo are on by default; set to false to disable one.
+      MES_EXIFTOOL_ENABLED: ${MES_EXIFTOOL_ENABLED:-true}
+      MES_MEDIAINFO_ENABLED: ${MES_MEDIAINFO_ENABLED:-true}
       # Opt-in tools (set to true once the tool is installed / reachable).
       MES_FFPROBE_ENABLED: ${MES_FFPROBE_ENABLED:-false}
       MES_IMAGEMAGICK_ENABLED: ${MES_IMAGEMAGICK_ENABLED:-false}
@@ -81,6 +85,19 @@ services:
       disable: true
     depends_on:
       - redis
+    restart: unless-stopped
+
+  # Documentation site (MkDocs, served by nginx): `docker compose --profile docs up --build`,
+  # then open http://localhost:8001. Set MES_DOCS_URL to link to it from the web UI.
+  docs:
+    profiles: ["docs"]
+    container_name: eosc-mes-docs
+    image: eosc-mes-docs:local
+    build:
+      context: ..
+      dockerfile: docs/Dockerfile
+    ports:
+      - "8001:8080"
     restart: unless-stopped
 
   # Optional Apache Tika server: `docker compose --profile tika up`, with MES_TIKA_ENABLED=true.

@@ -123,3 +123,30 @@ class FooterTextTests(SimpleTestCase):
     @override_settings(MES_FOOTER_TEXT="<script>x</script>")
     def test_footer_note_is_escaped(self):
         self.assertNotIn("<script>x</script>", self._html())
+
+
+class DocsLinkTests(SimpleTestCase):
+    def _footer(self):
+        return self.client.get("/").content.decode().split("<footer>")[1].split("</footer>")[0]
+
+    @override_settings(MES_DOCS_URL="")
+    def test_no_docs_link_when_unset(self):
+        footer = self._footer()
+        self.assertNotIn(">Documentation<", footer)
+        self.assertNotIn("DOCS_LINK", footer)
+
+    @override_settings(MES_DOCS_URL="http://localhost:8001")
+    def test_docs_link_is_shown_in_footer(self):
+        self.assertIn('<a href="http://localhost:8001">Documentation</a>', self._footer())
+
+    @override_settings(MES_DOCS_URL="https://docs.example.org/mes/")
+    def test_https_docs_link_is_shown(self):
+        self.assertIn('href="https://docs.example.org/mes/"', self._footer())
+
+    @override_settings(MES_DOCS_URL='http://x/"><script>x</script>')
+    def test_docs_link_is_escaped(self):
+        self.assertNotIn("<script>x</script>", self._footer())
+
+    @override_settings(MES_DOCS_URL="javascript:alert(1)")
+    def test_non_http_scheme_is_ignored(self):
+        self.assertNotIn("javascript:", self._footer())

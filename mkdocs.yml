@@ -1,0 +1,62 @@
+site_name: Metadata Extraction Service
+site_description: Documentation of the EOSC EDEN Metadata Extraction Service (MES).
+repo_url: https://github.com/EOSC-EDEN/metadata-extraction-service
+docs_dir: docs
+exclude_docs: |
+  mkdocs/casts/
+
+plugins:
+  - search
+  - redirects:
+      redirect_maps:
+        index.md: mkdocs/index.md
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: mkdocs/index.md
+  - Tutorials:
+      - First extraction with curl: mkdocs/tutorials/first-extraction-curl.md
+      - First extraction in the web UI: mkdocs/tutorials/first-extraction-web-ui.md
+  - How-to guides:
+      - Run with Docker Compose: mkdocs/how-to/docker-compose.md
+      - Enable optional tools: mkdocs/how-to/optional-tools.md
+      - Add a tool: adding-a-tool.md
+      - Configure local format rules: mkdocs/how-to/local-format-rules.md
+      - Use asynchronous jobs and Redis: mkdocs/how-to/async-jobs.md
+      - Extract several files at once: mkdocs/how-to/batch-extraction.md
+      - Integrate FFIS: mkdocs/how-to/ffis.md
+      - Monitor the service: mkdocs/how-to/monitoring.md
+      - Set limits and purge jobs: mkdocs/how-to/limits-and-purging.md
+  - Reference:
+      - REST API: mkdocs/reference/rest-api.md
+      - Environment variables and build args: mkdocs/reference/configuration.md
+      - Result container and statuses: mkdocs/reference/result-container.md
+      - Tools: mkdocs/reference/tools.md
+  - Explanation:
+      - Use cases and actors: use-cases.md
+      - Architecture diagrams: diagrams.md
+      - The persistence boundary: mkdocs/explanation/persistence-boundary.md
+      - Why raw tool output is unmodified: mkdocs/explanation/raw-output.md
+  - Specification: specification.md

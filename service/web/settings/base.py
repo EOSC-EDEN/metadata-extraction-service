@@ -147,6 +147,8 @@ def _env_flag(name: str, default: str = "false") -> bool:
 # Adds --skip-wellformed-check to File Scraper: metadata only, much lighter.
 MES_FILE_SCRAPER_SKIP_WELLFORMED = _env_flag("MES_FILE_SCRAPER_SKIP_WELLFORMED")
 
+# ExifTool and MediaInfo are on by default; set MES_EXIFTOOL_ENABLED / MES_MEDIAINFO_ENABLED=false
+# to switch one off. Do not disable the default tool (MES_DEFAULT_TOOL): requests would then fail.
 MES_TOOLS = {
     "exiftool": {
         "adapter": "apps.extraction.adapters.exiftool.ExifToolAdapter",
@@ -154,7 +156,7 @@ MES_TOOLS = {
         "invocation_command": os.environ.get("MES_EXIFTOOL_COMMAND", "exiftool"),
         "extra_args": [],
         "timeout_seconds": 30,
-        "enabled": True,
+        "enabled": _env_flag("MES_EXIFTOOL_ENABLED", "true"),
         "mandatory": False,
     },
     "mediainfo": {
@@ -163,7 +165,7 @@ MES_TOOLS = {
         "invocation_command": os.environ.get("MES_MEDIAINFO_COMMAND", "mediainfo"),
         "extra_args": [],
         "timeout_seconds": 30,
-        "enabled": True,
+        "enabled": _env_flag("MES_MEDIAINFO_ENABLED", "true"),
         "mandatory": False,
     },
     # Opt-in tools: disabled unless MES_<TOOL>_ENABLED is set, since they are not
@@ -268,6 +270,10 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 # Optional small note shown in the UI footer (e.g. a funding acknowledgement). Plain text.
 MES_FOOTER_TEXT = os.environ.get("MES_FOOTER_TEXT", "")
 
+# Optional URL of the documentation site (the `docs` compose profile); linked from the UI footer
+# when it is an http(s) URL.
+MES_DOCS_URL = os.environ.get("MES_DOCS_URL", "")
+
 # File Format Identification Service (FFIS, https://github.com/EOSC-EDEN/eosc-ffis).
 # Called only when a request supplies neither a PUID nor a MIME type.
 MES_FFIS_ENABLED = os.environ.get("MES_FFIS_ENABLED", "false").lower() in (
@@ -304,4 +310,7 @@ REST_FRAMEWORK = {
         "apps.api.renderers.MESXMLRenderer",
     ],
     "EXCEPTION_HANDLER": "apps.api.exceptions.exception_handler",
+    # The API is unauthenticated. The default SessionAuthentication would look up any
+    # `sessionid` cookie (browsers share cookies across localhost ports) in the database.
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
 }

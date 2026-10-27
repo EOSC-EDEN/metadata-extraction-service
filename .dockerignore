@@ -1,0 +1,5 @@
+# Used only by the docs image (build context = repository root): send just what it needs.
+*
+!mkdocs.yml
+!docs/
+docs/mkdocs/casts/
