@@ -44,6 +44,7 @@ nav:
       - Use asynchronous jobs and Redis: how-to/async-jobs.md
       - Extract several files at once: how-to/batch-extraction.md
       - Integrate FFIS: how-to/ffis.md
+      - Integrate Archivematica: how-to/archivematica-integration.md
       - Monitor the service: how-to/monitoring.md
       - Set limits and purge jobs: how-to/limits-and-purging.md
   - Reference:
