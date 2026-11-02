@@ -16,7 +16,7 @@ MES extracts **technical metadata** only. It does not identify formats itself (i
 ## Status
 
 !!! warning "Draft"
-    The [specification](../specification.md) is a **draft**, open for review by EDEN technical working groups. The implementation in `service/` is work in progress and does not cover everything in it. See "Not yet supported" in [Use cases and actors](../use-cases.md).
+    The [specification](specification.md) is a **draft**, open for review by EDEN technical working groups. The implementation in `service/` is work in progress and does not cover everything in it. See "Not yet supported" in [Use cases and actors](use-cases.md).
 
 ## Where to start
 
@@ -26,4 +26,4 @@ MES extracts **technical metadata** only. It does not identify formats itself (i
 | Run it | [Run with Docker Compose](how-to/docker-compose.md) |
 | Call the API | [REST API](reference/rest-api.md) |
 | Configure it | [Environment variables and build args](reference/configuration.md) |
-| Understand the design | [Use cases and actors](../use-cases.md), [Architecture diagrams](../diagrams.md) |
+| Understand the design | [Use cases and actors](use-cases.md), [Architecture diagrams](diagrams.md) |

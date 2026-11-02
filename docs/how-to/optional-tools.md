@@ -29,4 +29,4 @@ If the server is unreachable, returns an error or times out, Tika is reported as
 
 ## Add a tool that is not listed
 
-See [Add a tool](../../adding-a-tool.md).
+See [Add a tool](../adding-a-tool.md).

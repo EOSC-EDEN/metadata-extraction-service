@@ -42,11 +42,11 @@ See [`docs/diagrams.md`](docs/diagrams.md) for sequence diagrams of the synchron
 
 ## Documentation
 
-An MkDocs documentation site is available; its Markdown sources are in [`docs/`](docs/mkdocs/). It covers:
+An MkDocs documentation site is available; its Markdown sources are in [`docs/`](docs/). It covers:
 
-- tutorials: [first extraction with curl](docs/mkdocs/tutorials/first-extraction-curl.md) and [in the web UI](docs/mkdocs/tutorials/first-extraction-web-ui.md)
-- how-to guides: [Docker Compose](docs/mkdocs/how-to/docker-compose.md), [asynchronous jobs and Redis](docs/mkdocs/how-to/async-jobs.md), [batch extraction](docs/mkdocs/how-to/batch-extraction.md), [local format rules](docs/mkdocs/how-to/local-format-rules.md), [monitoring](docs/mkdocs/how-to/monitoring.md)
-- reference: [REST API](docs/mkdocs/reference/rest-api.md), [environment variables](docs/mkdocs/reference/configuration.md), [result container](docs/mkdocs/reference/result-container.md), [tools](docs/mkdocs/reference/tools.md)
+- tutorials: [first extraction with curl](docs/tutorials/first-extraction-curl.md) and [in the web UI](docs/tutorials/first-extraction-web-ui.md)
+- how-to guides: [Docker Compose](docs/how-to/docker-compose.md), [asynchronous jobs and Redis](docs/how-to/async-jobs.md), [batch extraction](docs/how-to/batch-extraction.md), [local format rules](docs/how-to/local-format-rules.md), [monitoring](docs/how-to/monitoring.md)
+- reference: [REST API](docs/reference/rest-api.md), [environment variables](docs/reference/configuration.md), [result container](docs/reference/result-container.md), [tools](docs/reference/tools.md)
 
 The draft specification is in [`docs/specification.md`](docs/specification.md).
 

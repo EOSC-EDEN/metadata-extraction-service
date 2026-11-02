@@ -10,4 +10,4 @@ The caller records the response (raw tool output, tool versions, timestamp, erro
 - The same file extracted twice with different tool versions gives different output. Keeping that history is a decision for the archive's provenance model, not for the extractor.
 - Stateless processing keeps the service easy to scale and replace. The only state, job records, is deliberately short-lived (`MES_JOB_TTL_SECONDS`).
 
-See "Recording and persistence" in the [specification](../../specification.md), and [Set limits and purge jobs](../how-to/limits-and-purging.md) for the temporary state.
+See "Recording and persistence" in the [specification](../specification.md), and [Set limits and purge jobs](../how-to/limits-and-purging.md) for the temporary state.
