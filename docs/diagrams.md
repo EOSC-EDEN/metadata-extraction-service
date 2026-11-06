@@ -228,8 +228,10 @@ access and on submit.
 ## Sequence diagram — synchronous batch (`POST /api/v1/extract/batch/`)
 
 Several files in one multipart request (the `files` field repeated once per file; at most
-`MES_MAX_FILES_PER_REQUEST`, advertised by `GET /limits/`). `puid` and `mime_type` apply to every file;
-`object_identifier` is not accepted, because each file is identified by its filename. The files are
+`MES_MAX_FILES_PER_REQUEST`, advertised by `GET /limits/`). `puid` and `mime_type` are defaults for
+every file; the optional `file_metadata` object, keyed by filename, gives individual files their own
+`puid`, `mime_type` and object identifier (a request-level `object_identifier` is not accepted). A file
+without an object identifier is linked in its PREMIS event by its filename. The files are
 processed one after another, and each goes through the same `extract()` as `/extract/`, so its `result`
 equals what that route returns for it. A request that is not acceptable (no files, too many, an empty
 file, too large) is refused as a whole before anything runs. Once accepted, a file that fails gets an
@@ -241,9 +243,9 @@ sequenceDiagram
     participant API as BatchExtractMetadataView
     participant Orch as ExtractionOrchestrator
 
-    Client->>API: POST /api/v1/extract/batch/ (files[], puid?, mime_type?)
-    API->>API: check declared length, validate request
-    alt too large, no files, too many files, an empty file or invalid
+    Client->>API: POST /api/v1/extract/batch/ (files[], puid?, mime_type?, file_metadata?)
+    API->>API: check declared length, validate request and file_metadata
+    alt too large, no files, too many files, an empty file, invalid or unmatched file_metadata
         API-->>Client: 413 or 400 error response (nothing is extracted)
     end
     API->>API: create one temp work dir
@@ -277,10 +279,10 @@ sequenceDiagram
     participant Store as JobStore
     participant Worker as worker thread
 
-    Client->>API: POST /api/v1/jobs/batch/ (files[], puid?, mime_type?)
+    Client->>API: POST /api/v1/jobs/batch/ (files[], puid?, mime_type?, file_metadata?)
     API->>API: check declared length, validate request
     API->>API: one work dir per file, save_upload into each
-    API->>Jobs: submit_batch(items, puid, mime_type, request_id)
+    API->>Jobs: submit_batch(items with each file's puid, mime_type and object identifier, request_id)
     Jobs->>Jobs: purge_expired()
     Jobs->>Store: create_many(one pending JobRecord per file)
     alt not enough room for every file (MES_ASYNC_MAX_JOBS)

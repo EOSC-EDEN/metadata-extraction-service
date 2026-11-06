@@ -74,8 +74,16 @@ class OpenAPITests(TestCase):
     def test_batch_extract_operation_describes_a_repeated_files_field(self):
         operation = self._schema()["paths"]["/api/v1/extract/batch/"]["post"]
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type"})
+        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type", "file_metadata"})
         self.assertEqual(form["required"], ["files"])
+        manifest = form["properties"]["file_metadata"]
+        self.assertEqual(manifest["type"], "object")
+        self.assertEqual(
+            set(manifest["additionalProperties"]["properties"]),
+            {"puid", "mime_type", "object_identifier", "object_identifier_type"},
+        )
+        encoding = operation["requestBody"]["content"]["multipart/form-data"]["encoding"]
+        self.assertEqual(encoding["file_metadata"]["contentType"], "application/json")
         self.assertEqual(
             form["properties"]["files"]["items"], {"type": "string", "format": "binary"}
         )
@@ -99,7 +107,7 @@ class OpenAPITests(TestCase):
         self.assertEqual(set(submit["responses"]), {"202", "400", "404", "413", "500", "503"})
         self.assertIn("Location", submit["responses"]["202"]["headers"])
         form = submit["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type"})
+        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type", "file_metadata"})
         accepted = submit["responses"]["202"]["content"]["application/json"]["schema"]
         self.assertEqual(set(accepted["required"]), {"batch_id", "created_at", "status", "jobs"})
         status = paths["/api/v1/job-batches/{batch_id}/"]["get"]

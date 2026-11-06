@@ -8,15 +8,25 @@ The screenshots were taken from a service with the default settings: only ExifTo
 
 Start the service as in [First extraction with curl](first-extraction-curl.md) and open <http://localhost:8000/>.
 
-![The web UI before an extraction: optional PUID, MIME type and object identifier fields, an asynchronous-processing checkbox and a drop zone.](img/web-ui-start.png)
+![The web UI before an extraction: the service info panel and a drop zone.](img/web-ui-start.png)
 
 - **Service info** (collapsed) lists the enabled tools and the deployment limits.
-- The optional fields let you name the file's format (PUID or MIME type) yourself, and give the file's PREMIS object an identifier. Leave them empty to let MES work it out.
-- **Process asynchronously** submits a job and waits for it to finish. It is only shown when `MES_ASYNC_ENABLED` is `true`.
+- The drop zone is where you choose your files.
 
 ## 2. Choose a file
 
-Drop a file on the drop zone, or click **browse to upload**. You can select several files; at most `max_files_per_request` are accepted (see `/api/v1/limits/`). The extraction starts at once.
+Drop a file on the drop zone, or click **browse to upload**. You can select several files; at most `max_files_per_request` are accepted (see `/api/v1/limits/`). Nothing is sent yet: the **Files to extract** section lists each file.
+
+![The Files to extract section with three files: the first has a PUID and an object identifier with its type, the second a MIME type, the third nothing.](img/web-ui-review.png)
+
+For each file you can optionally fill in:
+
+- **PUID** or **MIME type**, to name the file's format yourself. Leave them empty to let MES work it out.
+- **Object identifier** and **Identifier type**, to give the file's PREMIS object an identifier. Fill in both or neither.
+
+**Process asynchronously** submits a job (or one job per file) and waits for it to finish. It is only shown when `MES_ASYNC_ENABLED` is `true`.
+
+Choose **Extract** to start, or **Cancel** to go back and pick other files.
 
 ## 3. Read the result
 

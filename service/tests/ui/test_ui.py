@@ -22,14 +22,14 @@ class UiTests(SimpleTestCase):
         for element_id in FFIS_IDS:
             self.assertIn(f'id="{element_id}"', html, element_id)
 
-    def test_page_has_optional_puid_and_mime_inputs(self):
+    def test_page_no_longer_has_global_puid_mime_and_identifier_inputs(self):
         html = self.client.get("/").content.decode()
-        self.assertIn('id="puid-input"', html)
-        self.assertIn('id="mime-input"', html)
+        for element_id in ("options", "puid-input", "mime-input", "object-id-input", "object-id-type-input"):
+            self.assertNotIn(f'id="{element_id}"', html, element_id)
 
-    def test_page_has_object_identifier_inputs_and_event_section(self):
+    def test_page_has_event_section_and_sends_the_identifier_fields(self):
         html = self.client.get("/").content.decode()
-        for element_id in ("object-id-input", "object-id-type-input", "event-section", "event-body"):
+        for element_id in ("event-section", "event-body"):
             self.assertIn(f'id="{element_id}"', html, element_id)
         self.assertIn("'object_identifier'", html)
         self.assertIn("'object_identifier_type'", html)
@@ -69,12 +69,44 @@ class UiTests(SimpleTestCase):
         self.assertIn("/api/v1/job-batches/", html)
         self.assertIn("max_files_per_request", html)
 
-    def test_batch_sends_the_files_field_once_per_file_and_no_object_identifier(self):
+    def test_batch_sends_the_files_field_once_per_file(self):
         html = self._html()
         self.assertIn("form.append('files', f)", html)
-        # The single-file flow still sends `file`, and the object identifier stays single-file only.
+        # The single-file flow still sends `file`.
         self.assertIn("form.append('file', file)", html)
-        self.assertIn("object identifier cannot be used with several files", html)
+
+    def test_every_selection_opens_a_review_step_with_per_file_fields(self):
+        html = self._html()
+        for element_id in ("batch-review", "batch-review-rows", "batch-review-start", "batch-review-cancel"):
+            self.assertEqual(html.count(f'id="{element_id}"'), 1, element_id)
+        # Nothing is sent on selection: handleFiles only opens the review.
+        self.assertIn("showBatchReview(files);", html)
+        self.assertNotIn("if (files.length === 1) extractFile(files[0]); else", html)
+        # After confirmation one file uses the single-file route, two or more the batch route.
+        self.assertIn("if (files.length === 1) extractFile(files[0], metadata[files[0].name] || {});", html)
+        self.assertIn("else extractBatch(files, metadata);", html)
+        for field in ("puid", "mime_type", "object_identifier", "object_identifier_type"):
+            self.assertIn(f"['{field}',", html)
+
+    def test_the_async_option_lives_in_the_review_section(self):
+        html = self._html()
+        review = html.split('id="batch-review"')[1].split('id="spinner"')[0]
+        self.assertIn('id="async-checkbox"', review)
+        self.assertEqual(html.count('id="async-checkbox"'), 1)
+
+    def test_batch_sends_the_filled_per_file_values_as_file_metadata(self):
+        html = self._html()
+        self.assertIn("form.append('file_metadata', JSON.stringify(metadata))", html)
+        # Only the batch flow uses the manifest; the single-file flow does not.
+        self.assertEqual(html.count("form.append('file_metadata'"), 1)
+        # Entries are keyed by filename, so two files with one name cannot be described.
+        self.assertIn("metadata[file.name] = entry", html)
+        self.assertIn("so its values cannot be matched", html)
+
+    def test_per_file_content_is_escaped(self):
+        html = self._html()
+        self.assertIn("name.textContent = file.name", html)
+        self.assertNotIn("innerHTML = `<div class=\"review", html)
 
     def test_single_file_flow_and_ffis_ids_are_unchanged(self):
         html = self._html()

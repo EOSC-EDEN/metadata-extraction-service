@@ -247,28 +247,33 @@
     footer a { color: #4f6ef7; text-decoration: none; }
     footer .footer-note { margin: 6px 0 0; font-size: 0.75em; opacity: 0.8; }
 
-    /* MES additions: optional PUID / MIME inputs, errors card, tool output */
-    #options {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .75rem 1.25rem;
-      margin-bottom: 1rem;
-      font-size: .85rem;
-      color: #444;
-    }
-    #options label { display: flex; flex-direction: column; gap: .25rem; flex: 1; min-width: 200px; }
-    #options input {
+    /* MES additions: per-file review step, errors card, tool output */
+    label.async-option { display: flex; align-items: center; gap: .5rem; margin-top: 1rem; font-size: .85rem; color: #444; }
+    .review-hint { font-size: .85rem; color: #555; margin-bottom: .75rem; }
+    .review-row { border-top: 1px solid #e3e7f0; padding: .75rem 0; }
+    .review-name { font-weight: 600; font-size: .9rem; word-break: break-all; margin-bottom: .5rem; }
+    .review-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem .75rem; }
+    .review-fields label { display: flex; flex-direction: column; gap: .2rem; font-size: .78rem; color: #444; }
+    .review-fields input {
       border: 1px solid #b0b8cc;
       border-radius: 8px;
       background: #fff;
-      padding: .5rem .75rem;
-      font-size: .9rem;
+      padding: .4rem .6rem;
+      font-size: .85rem;
       font-family: monospace;
       color: #1a1a2e;
     }
-    #options input:focus { outline: none; border-color: #4f6ef7; }
-    #options label.async-option { flex-direction: row; align-items: center; gap: .5rem; flex-basis: 100%; }
-    #options label.async-option input { padding: 0; }
+    .review-fields input:focus { outline: none; border-color: #4f6ef7; }
+    .review-actions { display: flex; gap: .75rem; margin-top: 1rem; }
+    button.review-cancel {
+      background: #fff;
+      color: #444;
+      border: 1px solid #b0b8cc;
+      border-radius: 8px;
+      padding: .5rem 1.25rem;
+      font-size: .9rem;
+      cursor: pointer;
+    }
     .error-item {
       background: #fef2f2;
       border-left: 3px solid #dc2626;
@@ -344,30 +349,27 @@
     </div>
   </details>
 
-  <div id="options">
-    <label>PUID (optional)
-      <input type="text" id="puid-input" placeholder="e.g. fmt/43" autocomplete="off" />
-    </label>
-    <label>MIME type (optional)
-      <input type="text" id="mime-input" placeholder="e.g. image/jpeg" autocomplete="off" />
-    </label>
-    <label>Object identifier (optional)
-      <input type="text" id="object-id-input" placeholder="e.g. test.txt or SIP::2026-001/content/test.txt" maxlength="255" autocomplete="off" />
-    </label>
-    <label>Object identifier type (optional)
-      <input type="text" id="object-id-type-input" placeholder="e.g. filename or sip-path" maxlength="64" autocomplete="off" />
-    </label>
-    <label class="async-option" style="display:none">
-      <input type="checkbox" id="async-checkbox" />
-      Process asynchronously (submit a job and wait for it to finish)
-    </label>
-  </div>
-
   <div id="drop-zone">
     <div class="icon">📄</div>
     <p>Drag &amp; drop a file (or several) here, or <strong id="browse-link">browse to upload</strong></p>
     <p style="margin-top:.5rem;font-size:.83rem;color:#888">Any file type</p>
     <input type="file" id="file-input" multiple />
+  </div>
+
+  <div id="batch-review" class="card" style="display:none">
+    <div class="card-header">📋 Files to extract</div>
+    <div class="card-body">
+      <p class="review-hint">Optionally describe each file. Leave the PUID and MIME type empty to let the format be identified automatically. An object identifier needs its type.</p>
+      <div id="batch-review-rows"></div>
+      <label class="async-option" style="display:none">
+        <input type="checkbox" id="async-checkbox" />
+        Process asynchronously (submit a job and wait for it to finish)
+      </label>
+      <div class="review-actions">
+        <button type="button" class="try-again-btn" id="batch-review-start">Extract</button>
+        <button type="button" class="review-cancel" id="batch-review-cancel">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <div id="spinner">
@@ -444,11 +446,9 @@
   const resultDiv  = document.getElementById('result');
   const errorDiv   = document.getElementById('error');
   const tryAgain   = document.getElementById('try-again');
-  const optionsDiv = document.getElementById('options');
-  const puidInput  = document.getElementById('puid-input');
-  const mimeInput  = document.getElementById('mime-input');
-  const objectIdInput     = document.getElementById('object-id-input');
-  const objectIdTypeInput = document.getElementById('object-id-type-input');
+  const batchReview     = document.getElementById('batch-review');
+  const batchReviewRows = document.getElementById('batch-review-rows');
+  let pendingFiles = null;   // the files of a batch waiting in the review step
   const asyncCheckbox = document.getElementById('async-checkbox');
   const spinnerText   = document.getElementById('spinner-text');
   const infoPanel  = document.getElementById('info-panel');
@@ -541,7 +541,9 @@
 
   function reset() {
     fileInput.value = '';
-    optionsDiv.style.display = '';
+    pendingFiles = null;
+    batchReview.style.display = 'none';
+    batchReviewRows.innerHTML = '';
     if (infoReady) infoPanel.style.display = '';
     dropZone.style.display = '';
     spinner.style.display = 'none';
@@ -597,8 +599,88 @@
   function handleFiles(fileList) {
     const files = Array.from(fileList);
     if (!files.length) return;
-    if (files.length === 1) extractFile(files[0]); else extractBatch(files);
+    showBatchReview(files);
   }
+
+  // Every selection waits here: the user may describe each file before anything is sent.
+  // One file is then extracted with the single-file route, two or more with the batch route.
+  const REVIEW_FIELDS = [
+    ['puid', 'PUID', 'e.g. fmt/43', 64],
+    ['mime_type', 'MIME type', 'e.g. image/jpeg', 255],
+    ['object_identifier', 'Object identifier', 'e.g. a UUID', 255],
+    ['object_identifier_type', 'Identifier type', 'e.g. UUID', 64],
+  ];
+
+  function showBatchReview(files) {
+    pendingFiles = files;
+    errorDiv.style.display = 'none';
+    dropZone.style.display = 'none';
+    batchReviewRows.innerHTML = '';
+    files.forEach((file, index) => {
+      const row = document.createElement('div');
+      row.className = 'review-row';
+      row.dataset.index = String(index);
+      const name = document.createElement('div');
+      name.className = 'review-name';
+      name.textContent = file.name;
+      const fields = document.createElement('div');
+      fields.className = 'review-fields';
+      REVIEW_FIELDS.forEach(([field, label, placeholder, maxLength]) => {
+        const wrap = document.createElement('label');
+        wrap.textContent = label;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.dataset.field = field;
+        input.placeholder = placeholder;
+        input.maxLength = maxLength;
+        input.autocomplete = 'off';
+        wrap.appendChild(input);
+        fields.appendChild(wrap);
+      });
+      row.append(name, fields);
+      batchReviewRows.appendChild(row);
+    });
+    batchReview.style.display = 'block';
+  }
+
+  // The `file_metadata` object for the batch route: one entry per file that has a value.
+  // Returns {metadata} or {problem}; entries are keyed by filename, so two files with the same
+  // name cannot be described (the service would refuse the request as ambiguous).
+  function collectFileMetadata(files) {
+    const metadata = {};
+    const counts = {};
+    files.forEach(f => { counts[f.name] = (counts[f.name] || 0) + 1; });
+    for (const row of batchReviewRows.children) {
+      const file = files[Number(row.dataset.index)];
+      const entry = {};
+      row.querySelectorAll('input').forEach(input => {
+        const value = input.value.trim();
+        if (value) entry[input.dataset.field] = value;
+      });
+      if (!Object.keys(entry).length) continue;
+      if (counts[file.name] > 1) {
+        return { problem: `${counts[file.name]} files are named "${file.name}", so its values cannot be matched to one of them. Rename the files or clear the values.` };
+      }
+      if (Boolean(entry.object_identifier) !== Boolean(entry.object_identifier_type)) {
+        return { problem: `"${file.name}": give the object identifier and its type together.` };
+      }
+      metadata[file.name] = entry;
+    }
+    return { metadata };
+  }
+
+  document.getElementById('batch-review-cancel').addEventListener('click', reset);
+  document.getElementById('batch-review-start').addEventListener('click', () => {
+    if (!pendingFiles) return;
+    const { metadata, problem } = collectFileMetadata(pendingFiles);
+    if (problem) { showError(problem); return; }
+    const files = pendingFiles;
+    pendingFiles = null;
+    batchReview.style.display = 'none';
+    infoPanel.style.display = 'none';
+    if (files.length === 1) extractFile(files[0], metadata[files[0].name] || {});
+    else extractBatch(files, metadata);
+  });
 
   function showError(message) {
     errorDiv.textContent = '✗ ' + message;
@@ -606,9 +688,6 @@
   }
 
   function batchProblem(files) {
-    if (objectIdInput.value.trim() || objectIdTypeInput.value.trim()) {
-      return 'The object identifier cannot be used with several files; clear it, or upload one file at a time.';
-    }
     if (maxFilesPerRequest !== null && files.length > maxFilesPerRequest) {
       return `${files.length} files selected; the maximum per request is ${maxFilesPerRequest}.`;
     }
@@ -712,8 +791,7 @@
     }
   }
 
-  async function extractBatch(files) {
-    optionsDiv.style.display = 'none';
+  async function extractBatch(files, metadata = {}) {
     infoPanel.style.display = 'none';
     dropZone.style.display = 'none';
     resultDiv.style.display = 'none';
@@ -729,8 +807,7 @@
 
     const form = new FormData();
     files.forEach(f => form.append('files', f));
-    if (puidInput.value.trim()) form.append('puid', puidInput.value.trim());
-    if (mimeInput.value.trim()) form.append('mime_type', mimeInput.value.trim());
+    if (Object.keys(metadata).length) form.append('file_metadata', JSON.stringify(metadata));
 
     try {
       if (asyncCheckbox.checked) await runAsyncBatch(files, form);
@@ -743,8 +820,7 @@
     }
   }
 
-  async function extractFile(file) {
-    optionsDiv.style.display = 'none';
+  async function extractFile(file, entry = {}) {
     infoPanel.style.display = 'none';
     if (maxUploadBytes !== null && file.size > maxUploadBytes) {
       dropZone.style.display = 'none';
@@ -761,10 +837,9 @@
 
     const form = new FormData();
     form.append('file', file);
-    if (puidInput.value.trim()) form.append('puid', puidInput.value.trim());
-    if (mimeInput.value.trim()) form.append('mime_type', mimeInput.value.trim());
-    if (objectIdInput.value.trim()) form.append('object_identifier', objectIdInput.value.trim());
-    if (objectIdTypeInput.value.trim()) form.append('object_identifier_type', objectIdTypeInput.value.trim());
+    ['puid', 'mime_type', 'object_identifier', 'object_identifier_type'].forEach(field => {
+      if (entry[field]) form.append(field, entry[field]);
+    });
 
     try {
       const data = asyncCheckbox.checked
