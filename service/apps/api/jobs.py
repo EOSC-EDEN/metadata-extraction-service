@@ -144,8 +144,14 @@ class JobService:
             raise
         return record
 
-    def submit_batch(self, items, *, puid, mime_type, request_id) -> tuple[BatchRecord, list[JobRecord]]:
+    def submit_batch(
+        self, items, *, puid=None, mime_type=None, request_id
+    ) -> tuple[BatchRecord, list[JobRecord]]:
         """Queue one job per item (`file_path`, `work_dir`, `filename`, `size_bytes`), all or none.
+
+        An item may also carry its own `puid`, `mime_type`, `object_identifier` and
+        `object_identifier_type`; a `puid` or `mime_type` key (even `None`) replaces the shared
+        argument of the same name, which only serves items that have none.
 
         Raises `JobStoreFull`, with no job created, unless the store has room for every item; the
         caller then still owns every `work_dir`. Otherwise each job owns its `work_dir` from here on.
@@ -187,11 +193,11 @@ class JobService:
                     item["file_path"],
                     item["work_dir"],
                     item["filename"],
-                    puid,
-                    mime_type,
+                    item.get("puid", puid),
+                    item.get("mime_type", mime_type),
                     record.request_id,
-                    None,
-                    None,
+                    item.get("object_identifier"),
+                    item.get("object_identifier_type"),
                 )
             except Exception:
                 logger.exception("batch %s: could not queue job %s", batch.batch_id, record.job_id)

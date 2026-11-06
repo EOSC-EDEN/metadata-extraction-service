@@ -5,6 +5,8 @@ renderer (JSON now, XML later) serialises the same structure (MES-REQ-2-005).
 Tool `raw_output` is passed through as an unmodified string (MES-REQ-3-004).
 """
 
+import json
+from collections import Counter
 from datetime import datetime, timezone
 
 from django.conf import settings
@@ -62,8 +64,13 @@ def check_declared_length(content_length) -> None:
         )
 
 
-class ExtractionRequestSerializer(serializers.Serializer):
-    file = serializers.FileField()
+class FileDescriptionSerializer(serializers.Serializer):
+    """What a caller may say about one file: its format and the PREMIS object it is.
+
+    The single-file routes take these fields next to the upload; the batch routes take them per
+    file in the `file_metadata` manifest. One class, so both apply the same limits and rules.
+    """
+
     puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
     mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
     object_identifier = serializers.CharField(required=False, allow_blank=True, max_length=255)
@@ -77,6 +84,10 @@ class ExtractionRequestSerializer(serializers.Serializer):
                 "object_identifier and object_identifier_type must be given together."
             )
         return attrs
+
+
+class ExtractionRequestSerializer(FileDescriptionSerializer):
+    file = serializers.FileField()
 
     def validate_file(self, value):
         if value.size == 0:
@@ -92,23 +103,82 @@ class ExtractionRequestSerializer(serializers.Serializer):
 class BatchExtractionRequestSerializer(serializers.Serializer):
     """Several files in one request: the `files` field repeated once per file.
 
-    `puid` and `mime_type` apply to every file. There is no object identifier, so each file's
-    PREMIS event identifies its object by filename. An empty file makes the whole request invalid
-    (as on the single-file routes), so it is refused before anything is extracted or queued.
+    `puid` and `mime_type` apply to every file that has no value of its own. `file_metadata` is an
+    optional JSON object keyed by uploaded filename; each value holds `puid`, `mime_type`,
+    `object_identifier` and `object_identifier_type` for that file, with the rules of the
+    single-file route. A key must name exactly one uploaded file. There is no request-level object
+    identifier, because one identifier cannot name several files; a file without its own is linked
+    by filename in its PREMIS event. An empty file makes the whole request invalid (as on the
+    single-file routes), so it is refused before anything is extracted or queued.
+
+    After validation, `validated_data["per_file"]` lists, in upload order, the `puid`, `mime_type`,
+    `object_identifier` and `object_identifier_type` of each file (`None` when not given).
     """
 
     files = serializers.ListField(child=serializers.FileField(allow_empty_file=True))
     puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
     mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    file_metadata = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         # Blank counts as not supplied (multipart forms send empty fields), as on the single route.
         for name in ("object_identifier", "object_identifier_type"):
             if self.initial_data.get(name):
                 raise serializers.ValidationError(
-                    {name: "Not accepted on the batch route; each file is identified by its filename."}
+                    {name: "Not accepted on the batch route; give it per file in file_metadata."}
                 )
+        files = attrs["files"]
+        entries = self._parse_file_metadata(attrs.get("file_metadata"), [upload.name for upload in files])
+        attrs["per_file"] = [
+            {
+                "puid": entries.get(upload.name, {}).get("puid") or attrs.get("puid") or None,
+                "mime_type": entries.get(upload.name, {}).get("mime_type") or attrs.get("mime_type") or None,
+                "object_identifier": entries.get(upload.name, {}).get("object_identifier") or None,
+                "object_identifier_type": entries.get(upload.name, {}).get("object_identifier_type") or None,
+            }
+            for upload in files
+        ]
         return attrs
+
+    @staticmethod
+    def _parse_file_metadata(raw, filenames) -> dict[str, dict]:
+        """The validated entry of each filename that has one; raises one error listing every problem."""
+        if not raw:
+            return {}
+
+        def fail(*messages):
+            raise serializers.ValidationError({"file_metadata": list(messages)})
+
+        try:
+            manifest = json.loads(raw)
+        except ValueError:
+            fail("Not valid JSON.")
+        if not isinstance(manifest, dict):
+            fail("Must be a JSON object whose keys are uploaded filenames.")
+
+        uploads = Counter(filenames)
+        fields = set(FileDescriptionSerializer().fields)
+        entries, problems = {}, []
+        for name, value in manifest.items():
+            if uploads[name] == 0:
+                problems.append(f"'{name}': no uploaded file has this name.")
+            elif uploads[name] > 1:
+                problems.append(f"'{name}': {uploads[name]} uploaded files have this name, so the entry is ambiguous.")
+            elif value is None or value == {}:
+                continue  # nothing to say about this file
+            elif not isinstance(value, dict):
+                problems.append(f"'{name}': the entry must be an object.")
+            elif unknown := sorted(set(value) - fields):
+                problems.append(f"'{name}': unknown field(s) {', '.join(unknown)}.")
+            else:
+                entry = FileDescriptionSerializer(data=value)
+                if entry.is_valid():
+                    entries[name] = entry.validated_data
+                else:
+                    problems.extend(f"'{name}': {message}" for message in _messages(entry.errors))
+        if problems:
+            fail(*problems)
+        return entries
 
     def validate_files(self, value):
         if not value:
@@ -128,6 +198,15 @@ class BatchExtractionRequestSerializer(serializers.Serializer):
                 f"The uploaded files total {total} bytes, which exceeds the maximum of {limit} bytes."
             )
         return value
+
+
+def _messages(errors) -> list[str]:
+    """Reduce serializer errors ({"puid": ["..."], "non_field_errors": ["..."]}) to readable strings."""
+    messages = []
+    for key, value in errors.items():
+        label = "" if key == "non_field_errors" else f"{key}: "
+        messages.extend(f"{label}{message}" for message in value)
+    return messages
 
 
 def serialize_job_batch(batch, jobs) -> dict:

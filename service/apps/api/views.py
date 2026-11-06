@@ -134,22 +134,15 @@ class BatchExtractMetadataView(RequestIdMixin, APIView):
 
         entries = []
         with tempfile.TemporaryDirectory(dir=settings.MES_JOB_UPLOAD_DIR) as work_dir:
-            for index, upload in enumerate(uploads):
-                entries.append(
-                    self._extract_one(
-                        request,
-                        work_dir,
-                        index,
-                        upload,
-                        puid=data.get("puid") or None,
-                        mime_type=data.get("mime_type") or None,
-                    )
-                )
+            for index, (upload, described) in enumerate(zip(uploads, data["per_file"])):
+                entries.append(self._extract_one(request, work_dir, index, upload, **described))
         metrics.record_batch(metrics.classify_batch(entries), len(entries))
         return Response({"results": entries})
 
     @staticmethod
-    def _extract_one(request, work_dir, index, upload, *, puid, mime_type) -> dict:
+    def _extract_one(
+        request, work_dir, index, upload, *, puid, mime_type, object_identifier, object_identifier_type
+    ) -> dict:
         started = time.perf_counter()
         outcome = "error"
         entry = {"index": index, "filename": upload.name}
@@ -170,7 +163,13 @@ class BatchExtractMetadataView(RequestIdMixin, APIView):
             )
             metrics.record_tool_results(result.results)
             outcome = metrics.classify_outcome(result)
-            entry["result"] = serialize_extraction_result(result, request_id, upload.name)
+            entry["result"] = serialize_extraction_result(
+                result,
+                request_id,
+                upload.name,
+                object_identifier=object_identifier,
+                object_identifier_type=object_identifier_type,
+            )
         except ToolNotConfigured as exc:
             logger.error("tool not configured: %s", exc, extra=extra)
             entry["errors"] = [str(exc)]
@@ -253,7 +252,7 @@ class BatchJobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
         work_dirs = []
         try:
             items = []
-            for upload in data["files"]:
+            for upload, described in zip(data["files"], data["per_file"]):
                 work_dir = tempfile.mkdtemp(dir=settings.MES_JOB_UPLOAD_DIR)
                 work_dirs.append(work_dir)
                 items.append(
@@ -262,13 +261,11 @@ class BatchJobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
                         "work_dir": work_dir,
                         "filename": upload.name,
                         "size_bytes": upload.size,
+                        **described,
                     }
                 )
             batch, records = get_job_service().submit_batch(
-                items,
-                puid=data.get("puid") or None,
-                mime_type=data.get("mime_type") or None,
-                request_id=request.mes_request_id,
+                items, puid=None, mime_type=None, request_id=request.mes_request_id
             )
         except BaseException as exc:
             # Nothing was queued (the service raises before it takes ownership of any upload).

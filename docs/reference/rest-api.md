@@ -9,7 +9,7 @@ JSON is the default response format. Send `Accept: application/xml` for XML wher
 | Endpoint | Description |
 |---|---|
 | `POST /api/v1/extract/` | Extract metadata from one uploaded file (multipart: `file`, optional `puid`, `mime_type`, and the paired `object_identifier` and `object_identifier_type`). |
-| `POST /api/v1/extract/batch/` | Several files in one request (the `files` field repeated; optional `puid` and `mime_type` for every file). `200` with `{"results": [...]}`. See [Extract several files at once](../how-to/batch-extraction.md). |
+| `POST /api/v1/extract/batch/` | Several files in one request (the `files` field repeated; optional `puid` and `mime_type` as defaults, and an optional `file_metadata` JSON object keyed by filename for per-file `puid`, `mime_type` and object identifier). `200` with `{"results": [...]}`. See [Extract several files at once](../how-to/batch-extraction.md). |
 
 ## Asynchronous jobs
 

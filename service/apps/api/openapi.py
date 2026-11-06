@@ -369,15 +369,45 @@ class _BatchRequestBodyMixin:
                             "puid": {
                                 "type": "string",
                                 "maxLength": 64,
-                                "description": "Optional PRONOM PUID, applied to every file. If given, format identification is not called.",
+                                "description": "Optional PRONOM PUID, the default for every file without its own in `file_metadata`. If given, format identification is not called.",
                             },
                             "mime_type": {
                                 "type": "string",
                                 "maxLength": 255,
-                                "description": "Optional MIME type, applied to every file. If given, format identification is not called.",
+                                "description": "Optional MIME type, the default for every file without its own in `file_metadata`. If given, format identification is not called.",
+                            },
+                            "file_metadata": {
+                                "type": "object",
+                                "description": (
+                                    "Optional values per file, as a JSON object keyed by uploaded filename. A key "
+                                    "must name exactly one uploaded file (an unknown or ambiguous key gives 400). "
+                                    "A file's own `puid` and `mime_type` replace the request-level ones; "
+                                    "`object_identifier` and `object_identifier_type` must be given together and "
+                                    "become the PREMIS object link of that file's event (otherwise its filename)."
+                                ),
+                                "additionalProperties": {
+                                    "type": "object",
+                                    "nullable": True,
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "puid": {"type": "string", "maxLength": 64},
+                                        "mime_type": {"type": "string", "maxLength": 255},
+                                        "object_identifier": {"type": "string", "maxLength": 255},
+                                        "object_identifier_type": {"type": "string", "maxLength": 64},
+                                    },
+                                },
+                                "example": {
+                                    "a.jpg": {
+                                        "puid": "fmt/43",
+                                        "object_identifier": "3f1c9a52-7d0e-4b8a-9a52-0c1e2f3a4b5c",
+                                        "object_identifier_type": "UUID",
+                                    },
+                                    "b.pdf": {"mime_type": "application/pdf"},
+                                },
                             },
                         },
-                    }
+                    },
+                    "encoding": {"file_metadata": {"contentType": "application/json"}},
                 }
             },
         }
@@ -399,7 +429,7 @@ class BatchExtractAutoSchema(_BatchRequestBodyMixin, AutoSchema):
                 ),
                 "content": _json_and_xml(load_batch_schema()),
             },
-            "400": _job_error("No files, too many files (`MES_MAX_FILES_PER_REQUEST`), an empty file, or an object identifier was given."),
+            "400": _job_error("No files, too many files (`MES_MAX_FILES_PER_REQUEST`), an empty file, a request-level object identifier, or an invalid `file_metadata` (not JSON, an unknown or ambiguous filename, a bad value)."),
             "413": _job_error("The files together exceed the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
             "500": _job_error("Unexpected error while processing the request."),
         }
@@ -418,7 +448,7 @@ class BatchJobSubmitAutoSchema(_BatchRequestBodyMixin, AutoSchema):
                 "headers": {"Location": {"schema": {"type": "string"}}},
                 "content": _json_and_xml(load_job_batch_schema()),
             },
-            "400": _job_error("No files, too many files, an empty file, or an object identifier was given."),
+            "400": _job_error("No files, too many files, an empty file, a request-level object identifier, or an invalid `file_metadata` (not JSON, an unknown or ambiguous filename, a bad value)."),
             "404": _job_error("Asynchronous processing is disabled (`MES_ASYNC_ENABLED`)."),
             "413": _job_error("The files together exceed the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
             "500": _job_error("Unexpected error while processing the request."),
