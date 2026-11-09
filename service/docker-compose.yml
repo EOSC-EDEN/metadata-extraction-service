@@ -25,7 +25,7 @@ services:
   mes:
     container_name: eosc-mes
     image: eosc-mes:local
-    build:
+    build: &mes-build
       context: .
       # A local tool is installed in the image whenever it is enabled (MES_<TOOL>_ENABLED).
       args:
@@ -82,6 +82,8 @@ services:
     profiles: ["redis"]
     container_name: eosc-mes-purge
     image: eosc-mes:local
+    # Same build as `mes`, so a clean machine builds the image instead of trying to pull it.
+    build: *mes-build
     command: ["sh", "scripts/purge-loop.sh"]
     environment: *mes-environment
     volumes:
