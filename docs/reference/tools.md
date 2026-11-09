@@ -9,6 +9,8 @@ The tools MES can call. `GET /api/v1/tools/` lists them with their state in a ru
 | FFprobe | `ffprobe` | subprocess | no | 30 s | |
 | ImageMagick | `imagemagick` | subprocess | no | 30 s | Runs `identify`. |
 | metaflac | `metaflac` | subprocess | no | 30 s | FLAC only. |
+| JHOVE | `jhove` | subprocess | no | 60 s | Runs `jhove -h xml`. Technical properties only: the validity `status` and `messages` in the raw XML are not an MES verdict and never become errors or warnings. Select it by format with a [local rule](../how-to/local-format-rules.md). |
+| veraPDF | `verapdf` | subprocess | no | 60 s | PDF only. Runs `verapdf --off --extract <features>`: validation is off, so the output is a feature report. Features come from `MES_VERAPDF_FEATURES`. |
 | File Scraper | `file_scraper` | subprocess | no | 120 s | Runs the `scraper` CLI; slow on large files. The gunicorn worker timeout (120 s) still applies to synchronous requests. |
 | Apache Tika | `tika` | HTTP service | no | 60 s | Needs a Tika server. |
 

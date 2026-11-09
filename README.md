@@ -17,7 +17,7 @@ No single extraction tool can capture all relevant internal metadata for the div
 - Returning results through a standardised REST API, in both XML and JSON, for one or more files per request. Extraction from a whole Submission/Archival Information Package (per the [SIP2AIP Factory specification](https://github.com/EOSC-EDEN/wp2-oais-packaging-information)) is not implemented yet.
 - Supporting extensibility, so new extraction tools can be added behind adapters without changing the core wrapper logic.
 
-Supported tool integrations are ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac (FLAC only), File Scraper (CLI, opt-in), and Apache Tika.
+Supported tool integrations are ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac (FLAC only), JHOVE and veraPDF (technical metadata only, opt-in), File Scraper (CLI, opt-in), and Apache Tika.
 
 See [`docs/specification.md`](docs/specification.md) for the full specification, including normative requirements and non-normative guidance.
 

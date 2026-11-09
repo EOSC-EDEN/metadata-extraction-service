@@ -7,6 +7,8 @@ ExifTool and MediaInfo are installed and enabled by default; set `MES_EXIFTOOL_E
 | FFprobe | `INSTALL_FFPROBE=true` | `MES_FFPROBE_ENABLED=true` | Command: `MES_FFPROBE_COMMAND`. |
 | ImageMagick | `INSTALL_IMAGEMAGICK=true` | `MES_IMAGEMAGICK_ENABLED=true` | Command (`identify`): `MES_IMAGEMAGICK_COMMAND`. |
 | metaflac | `INSTALL_METAFLAC=true` | `MES_METAFLAC_ENABLED=true` | FLAC only; it fails with a warning on other files, so enable it for FLAC input or select it with a [local rule](local-format-rules.md). |
+| JHOVE | `INSTALL_JHOVE=true` | `MES_JHOVE_ENABLED=true` | Adds a JRE. JHOVE cannot switch validation off, so its XML report always has a validity status; MES keeps it in the raw output and does not treat it as an error. Enable it for the formats its modules cover, or select it with a [local rule](local-format-rules.md). |
+| veraPDF | `INSTALL_VERAPDF=true` | `MES_VERAPDF_ENABLED=true` | Adds a JRE. PDF only; it fails with a warning on other files. Runs with validation off. Set `MES_VERAPDF_FEATURES` to change the extracted features. |
 | File Scraper | `INSTALL_FILE_SCRAPER=true` | `MES_FILE_SCRAPER_ENABLED=true` | Adds several hundred MB. `MES_FILE_SCRAPER_SKIP_WELLFORMED=true` gives a lighter, metadata-only run. It exits 0 for files that are not well-formed: check `well-formed` and `errors` in its JSON. |
 | Apache Tika | none (separate server) | `MES_TIKA_ENABLED=true` | See below. |
 
