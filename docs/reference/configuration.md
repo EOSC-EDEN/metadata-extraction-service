@@ -34,16 +34,7 @@
 
 ## Dockerfile build args
 
-| Argument | Default | Installs |
-|---|---|---|
-| `INSTALL_EXIFTOOL` | `true` | ExifTool |
-| `INSTALL_MEDIAINFO` | `true` | MediaInfo |
-| `INSTALL_FFPROBE` | `false` | FFprobe |
-| `INSTALL_IMAGEMAGICK` | `false` | ImageMagick |
-| `INSTALL_METAFLAC` | `false` | metaflac (the `flac` package) |
-| `INSTALL_JHOVE` | `false` | JHOVE and a JRE (already included by `INSTALL_FILE_SCRAPER`) |
-| `INSTALL_VERAPDF` | `false` | veraPDF and a JRE (already included by `INSTALL_FILE_SCRAPER`) |
-| `INSTALL_FILE_SCRAPER` | `false` | File Scraper and its dependencies (several hundred MB) |
+With docker compose there is no separate install setting: each local tool is installed in the image when its `MES_<TOOL>_ENABLED` is `true` (ExifTool and MediaInfo by default), and you rebuild after changing it. Compose passes this to the `Dockerfile` as `INSTALL_<TOOL>` build args (`EXIFTOOL`, `MEDIAINFO`, `FFPROBE`, `IMAGEMAGICK`, `METAFLAC`, `JHOVE`, `VERAPDF`, `FILE_SCRAPER`); set those directly only with plain `docker build --build-arg`. JHOVE and veraPDF are already included by File Scraper.
 
 The remaining `ARG`s in `service/Dockerfile` (`FILE_SCRAPER_REF`, `JHOVE_JAR_URL`, `VERAPDF_VERSION` and so on) pin the versions of File Scraper's components.
 

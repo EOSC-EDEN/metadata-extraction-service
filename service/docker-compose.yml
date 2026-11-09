@@ -27,15 +27,16 @@ services:
     image: eosc-mes:local
     build:
       context: .
+      # A local tool is installed in the image whenever it is enabled (MES_<TOOL>_ENABLED).
       args:
-        INSTALL_EXIFTOOL: ${INSTALL_EXIFTOOL:-true}
-        INSTALL_MEDIAINFO: ${INSTALL_MEDIAINFO:-true}
-        INSTALL_FFPROBE: ${INSTALL_FFPROBE:-false}
-        INSTALL_IMAGEMAGICK: ${INSTALL_IMAGEMAGICK:-false}
-        INSTALL_METAFLAC: ${INSTALL_METAFLAC:-false}
-        INSTALL_JHOVE: ${INSTALL_JHOVE:-false}
-        INSTALL_VERAPDF: ${INSTALL_VERAPDF:-false}
-        INSTALL_FILE_SCRAPER: ${INSTALL_FILE_SCRAPER:-false}
+        INSTALL_EXIFTOOL: ${MES_EXIFTOOL_ENABLED:-true}
+        INSTALL_MEDIAINFO: ${MES_MEDIAINFO_ENABLED:-true}
+        INSTALL_FFPROBE: ${MES_FFPROBE_ENABLED:-false}
+        INSTALL_IMAGEMAGICK: ${MES_IMAGEMAGICK_ENABLED:-false}
+        INSTALL_METAFLAC: ${MES_METAFLAC_ENABLED:-false}
+        INSTALL_JHOVE: ${MES_JHOVE_ENABLED:-false}
+        INSTALL_VERAPDF: ${MES_VERAPDF_ENABLED:-false}
+        INSTALL_FILE_SCRAPER: ${MES_FILE_SCRAPER_ENABLED:-false}
     ports:
       - "8000:8000"
     environment:

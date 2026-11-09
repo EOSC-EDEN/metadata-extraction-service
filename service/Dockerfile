@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MES_JOB_UPLOAD_DIR=/var/lib/mes/uploads
 
 # Extraction tools are optional build args: enable with --build-arg INSTALL_<TOOL>=true,
-# disable with =false. ExifTool and MediaInfo are on by default; the rest are opt-in.
+# disable with =false. docker compose sets them from MES_<TOOL>_ENABLED, so enabling a tool installs it.
+# ExifTool and MediaInfo are on by default; the rest are opt-in.
 # Apache Tika runs as a separate container (see docker-compose.yml, profile "tika").
 # Enable each opt-in tool with MES_<TOOL>_ENABLED=true.
 ARG INSTALL_EXIFTOOL=true

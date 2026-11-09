@@ -172,7 +172,7 @@ MES_TOOLS = {
         "mandatory": False,
     },
     # Opt-in tools: disabled unless MES_<TOOL>_ENABLED is set, since they are not
-    # installed in the default image (see the Dockerfile INSTALL_* build args).
+    # installed in the default image (docker compose installs a tool in the image when it is enabled).
     "ffprobe": {
         "adapter": "apps.extraction.adapters.ffprobe.FFprobeAdapter",
         "kind": "subprocess",
