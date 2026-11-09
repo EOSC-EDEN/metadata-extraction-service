@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MES_JOB_UPLOAD_DIR=/var/lib/mes/uploads
 
 # Extraction tools are optional build args: enable with --build-arg INSTALL_<TOOL>=true,
-# disable with =false. ExifTool and MediaInfo are on by default; the rest are opt-in.
+# disable with =false. docker compose sets them from MES_<TOOL>_ENABLED, so enabling a tool installs it.
+# ExifTool and MediaInfo are on by default; the rest are opt-in.
 # Apache Tika runs as a separate container (see docker-compose.yml, profile "tika").
 # Enable each opt-in tool with MES_<TOOL>_ENABLED=true.
 ARG INSTALL_EXIFTOOL=true
@@ -15,6 +16,10 @@ ARG INSTALL_MEDIAINFO=true
 ARG INSTALL_FFPROBE=false
 ARG INSTALL_IMAGEMAGICK=false
 ARG INSTALL_METAFLAC=false
+# JHOVE and veraPDF (technical metadata only): each needs a JRE. INSTALL_FILE_SCRAPER already
+# installs both, so these two only matter for an image without File Scraper.
+ARG INSTALL_JHOVE=false
+ARG INSTALL_VERAPDF=false
 # File Scraper (CLI `scraper`): adds several hundred MB (JRE, JHove, LibreOffice, ...).
 ARG INSTALL_FILE_SCRAPER=false
 # Pinned sources for File Scraper; override with --build-arg. FILE_SCRAPER_REF and the
@@ -39,6 +44,8 @@ RUN set -eu; \
     [ "$INSTALL_FFPROBE" = "true" ] && packages="$packages ffmpeg"; \
     [ "$INSTALL_IMAGEMAGICK" = "true" ] && packages="$packages imagemagick"; \
     [ "$INSTALL_METAFLAC" = "true" ] && packages="$packages flac"; \
+    [ "$INSTALL_JHOVE" = "true" ] && packages="$packages default-jre-headless curl ca-certificates"; \
+    [ "$INSTALL_VERAPDF" = "true" ] && packages="$packages default-jre-headless curl ca-certificates unzip"; \
     [ "$INSTALL_FILE_SCRAPER" = "true" ] && packages="$packages git libmagic1 imagemagick libmagickwand-dev \
         libimage-exiftool-perl mediainfo ffmpeg pngcheck ghostscript libreoffice-core libreoffice-writer \
         libreoffice-calc libreoffice-impress libreoffice-java-common default-jre-headless curl gcc pkg-config \
@@ -97,6 +104,26 @@ RUN set -eu; \
         java -jar /tmp/verapdf/verapdf-greenfield-*/verapdf-izpack-installer-*.jar /tmp/verapdf-auto.xml; \
         ln -s /opt/verapdf/verapdf /usr/local/bin/verapdf; \
         rm -rf /tmp/verapdf /tmp/verapdf.zip /tmp/verapdf-auto.xml; \
+    fi
+
+# Standalone JHOVE and veraPDF, system-wide (the container runs as the non-root `mes` user).
+# Skipped when File Scraper's block above already installed them. Same installers as there.
+RUN set -eu; \
+    if [ "$INSTALL_JHOVE" = "true" ] && [ ! -x /usr/local/bin/jhove ]; then \
+        curl -fsSL -o /tmp/jhove.jar "$JHOVE_JAR_URL"; \
+        printf '1\n/opt/jhove\nO\n1\nY\n1\n1\n1\n1\n1\n' | java -jar /tmp/jhove.jar -console; \
+        ln -s /opt/jhove/jhove /usr/local/bin/jhove; \
+        rm -f /tmp/jhove.jar; \
+        jhove -h xml /etc/hostname > /dev/null; \
+    fi; \
+    if [ "$INSTALL_VERAPDF" = "true" ] && [ ! -x /usr/local/bin/verapdf ]; then \
+        curl -fsSL -o /tmp/verapdf.zip "https://software.verapdf.org/rel/1.30/verapdf-greenfield-${VERAPDF_VERSION}-installer.zip"; \
+        unzip -q /tmp/verapdf.zip -d /tmp/verapdf; \
+        printf '%s' '<AutomatedInstallation langpack="eng"><com.izforge.izpack.panels.htmlhello.HTMLHelloPanel id="welcome"/><com.izforge.izpack.panels.target.TargetPanel id="install_dir"><installpath>/opt/verapdf</installpath></com.izforge.izpack.panels.target.TargetPanel><com.izforge.izpack.panels.packs.PacksPanel id="sdk_pack_select"><pack index="0" name="veraPDF GUI" selected="true"/><pack index="1" name="veraPDF Mac and *nix Scripts" selected="true"/><pack index="2" name="veraPDF Validation model" selected="true"/><pack index="3" name="veraPDF Documentation" selected="false"/><pack index="4" name="veraPDF Sample Plugins" selected="false"/></com.izforge.izpack.panels.packs.PacksPanel><com.izforge.izpack.panels.install.InstallPanel id="install"/><com.izforge.izpack.panels.finish.FinishPanel id="finish"/></AutomatedInstallation>' > /tmp/verapdf-auto.xml; \
+        java -jar /tmp/verapdf/verapdf-greenfield-*/verapdf-izpack-installer-*.jar /tmp/verapdf-auto.xml; \
+        ln -s /opt/verapdf/verapdf /usr/local/bin/verapdf; \
+        rm -rf /tmp/verapdf /tmp/verapdf.zip /tmp/verapdf-auto.xml; \
+        verapdf --version > /dev/null; \
     fi
 
 RUN useradd --system --create-home --uid 10001 mes \

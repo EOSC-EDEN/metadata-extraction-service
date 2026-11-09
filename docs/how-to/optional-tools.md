@@ -1,19 +1,21 @@
 # Enable optional tools
 
-ExifTool and MediaInfo are installed and enabled by default; set `MES_EXIFTOOL_ENABLED=false` or `MES_MEDIAINFO_ENABLED=false` to disable one. Keep the tool named by `MES_DEFAULT_TOOL` (ExifTool by default) enabled, or change `MES_DEFAULT_TOOL` first. The other tools are opt-in, in two steps: install the tool in the image with a build argument, then enable it with an environment variable.
+ExifTool and MediaInfo are installed and enabled by default; set `MES_EXIFTOOL_ENABLED=false` or `MES_MEDIAINFO_ENABLED=false` to disable one. Keep the tool named by `MES_DEFAULT_TOOL` (ExifTool by default) enabled, or change `MES_DEFAULT_TOOL` first. The other tools are opt-in: enabling one with its environment variable also installs it in the image, so there is no separate install setting.
 
-| Tool | Build argument | Enable with | Notes |
-|---|---|---|---|
-| FFprobe | `INSTALL_FFPROBE=true` | `MES_FFPROBE_ENABLED=true` | Command: `MES_FFPROBE_COMMAND`. |
-| ImageMagick | `INSTALL_IMAGEMAGICK=true` | `MES_IMAGEMAGICK_ENABLED=true` | Command (`identify`): `MES_IMAGEMAGICK_COMMAND`. |
-| metaflac | `INSTALL_METAFLAC=true` | `MES_METAFLAC_ENABLED=true` | FLAC only; it fails with a warning on other files, so enable it for FLAC input or select it with a [local rule](local-format-rules.md). |
-| File Scraper | `INSTALL_FILE_SCRAPER=true` | `MES_FILE_SCRAPER_ENABLED=true` | Adds several hundred MB. `MES_FILE_SCRAPER_SKIP_WELLFORMED=true` gives a lighter, metadata-only run. It exits 0 for files that are not well-formed: check `well-formed` and `errors` in its JSON. |
-| Apache Tika | none (separate server) | `MES_TIKA_ENABLED=true` | See below. |
+| Tool | Enable with | Notes |
+|---|---|---|
+| FFprobe | `MES_FFPROBE_ENABLED=true` | Command: `MES_FFPROBE_COMMAND`. |
+| ImageMagick | `MES_IMAGEMAGICK_ENABLED=true` | Command (`identify`): `MES_IMAGEMAGICK_COMMAND`. |
+| metaflac | `MES_METAFLAC_ENABLED=true` | FLAC only; it fails with a warning on other files, so enable it for FLAC input or select it with a [local rule](local-format-rules.md). |
+| JHOVE | `MES_JHOVE_ENABLED=true` | Adds a JRE. JHOVE cannot switch validation off, so its XML report always has a validity status; MES keeps it in the raw output and does not treat it as an error. Enable it for the formats its modules cover, or select it with a [local rule](local-format-rules.md). |
+| veraPDF | `MES_VERAPDF_ENABLED=true` | Adds a JRE. PDF only; it fails with a warning on other files. Runs with validation off. Set `MES_VERAPDF_FEATURES` to change the extracted features. |
+| File Scraper | `MES_FILE_SCRAPER_ENABLED=true` | Adds several hundred MB. `MES_FILE_SCRAPER_SKIP_WELLFORMED=true` gives a lighter, metadata-only run. It exits 0 for files that are not well-formed: check `well-formed` and `errors` in its JSON. |
+| Apache Tika | `MES_TIKA_ENABLED=true` | Separate server, see below. |
 
-Set both in `service/.env`, then rebuild:
+Set the flag in `service/.env`, then rebuild so the tool is installed:
 
 ```bash
-INSTALL_METAFLAC=true MES_METAFLAC_ENABLED=true docker compose up --build -d
+MES_METAFLAC_ENABLED=true docker compose up --build -d
 ```
 
 Check the result with `curl http://localhost:8000/api/v1/tools/`.

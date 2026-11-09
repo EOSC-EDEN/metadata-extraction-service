@@ -35,6 +35,10 @@ class DefaultToolSetTests(SimpleTestCase):
         "ffprobe": "FFprobeAdapter",
         "imagemagick": "ImageMagickAdapter",
         "metaflac": "MetaflacAdapter",
+        "jhove": "JhoveAdapter",
+        "verapdf": "VeraPdfAdapter",
+        "jhove": "JhoveAdapter",
+        "verapdf": "VeraPdfAdapter",
         "file_scraper": "FileScraperAdapter",
         "tika": "TikaAdapter",
     }

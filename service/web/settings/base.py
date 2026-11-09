@@ -147,6 +147,9 @@ def _env_flag(name: str, default: str = "false") -> bool:
 # Adds --skip-wellformed-check to File Scraper: metadata only, much lighter.
 MES_FILE_SCRAPER_SKIP_WELLFORMED = _env_flag("MES_FILE_SCRAPER_SKIP_WELLFORMED")
 
+# veraPDF features to extract (comma-separated `--extract` names); blank uses the adapter default.
+MES_VERAPDF_FEATURES = os.environ.get("MES_VERAPDF_FEATURES", "")
+
 # ExifTool and MediaInfo are on by default; set MES_EXIFTOOL_ENABLED / MES_MEDIAINFO_ENABLED=false
 # to switch one off. Do not disable the default tool (MES_DEFAULT_TOOL): requests would then fail.
 MES_TOOLS = {
@@ -169,7 +172,7 @@ MES_TOOLS = {
         "mandatory": False,
     },
     # Opt-in tools: disabled unless MES_<TOOL>_ENABLED is set, since they are not
-    # installed in the default image (see the Dockerfile INSTALL_* build args).
+    # installed in the default image (docker compose installs a tool in the image when it is enabled).
     "ffprobe": {
         "adapter": "apps.extraction.adapters.ffprobe.FFprobeAdapter",
         "kind": "subprocess",
@@ -195,6 +198,26 @@ MES_TOOLS = {
         "extra_args": [],
         "timeout_seconds": 30,
         "enabled": _env_flag("MES_METAFLAC_ENABLED"),
+        "mandatory": False,
+    },
+    "jhove": {
+        "adapter": "apps.extraction.adapters.jhove.JhoveAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_JHOVE_COMMAND", "jhove"),
+        "extra_args": [],
+        # Starts a JVM per call.
+        "timeout_seconds": 60,
+        "enabled": _env_flag("MES_JHOVE_ENABLED"),
+        "mandatory": False,
+    },
+    "verapdf": {
+        "adapter": "apps.extraction.adapters.verapdf.VeraPdfAdapter",
+        "kind": "subprocess",
+        "invocation_command": os.environ.get("MES_VERAPDF_COMMAND", "verapdf"),
+        "extra_args": [],
+        # Starts a JVM per call.
+        "timeout_seconds": 60,
+        "enabled": _env_flag("MES_VERAPDF_ENABLED"),
         "mandatory": False,
     },
     "file_scraper": {

@@ -6,7 +6,9 @@ from apps.extraction.adapters.ffprobe import FFprobeAdapter
 from apps.extraction.adapters.imagemagick import ImageMagickAdapter
 from apps.extraction.adapters.mediainfo import MediaInfoAdapter
 from apps.extraction.adapters.metaflac import MetaflacAdapter
+from apps.extraction.adapters.jhove import JhoveAdapter
 from apps.extraction.adapters.tika import TikaAdapter
+from apps.extraction.adapters.verapdf import VeraPdfAdapter
 
 C = ErrorCategory
 
@@ -36,6 +38,8 @@ CASES = {
         ('ERROR: reading metadata, status = "FLAC__METADATA_CHAIN_STATUS_NOT_A_FLAC_FILE"', C.WRONG_FORMAT),
         ('ERROR: reading metadata, status = "FLAC__METADATA_CHAIN_STATUS_BAD_METADATA"', C.TRUNCATED_OR_BROKEN),
     ],
+    JhoveAdapter: [("PDF is encrypted", C.ENCRYPTED)],
+    VeraPdfAdapter: [("The PDF is encrypted, password required", C.ENCRYPTED)],
     TikaAdapter: [
         ("415 Client Error: Unsupported Media Type for url: http://tika/rmeta", C.WRONG_FORMAT),
         ("EncryptedDocumentException: password required", C.ENCRYPTED),

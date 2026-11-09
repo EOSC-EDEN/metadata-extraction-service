@@ -26,21 +26,15 @@
 | `MES_FFIS_BASE_URL` | empty | FFIS base URL. |
 | `MES_FFIS_TIMEOUT_SECONDS` | `30` | FFIS call timeout. |
 | `MES_EXIFTOOL_ENABLED`, `MES_MEDIAINFO_ENABLED` | `true` | Set to `false` to disable ExifTool or MediaInfo. Do not disable the tool named by `MES_DEFAULT_TOOL`: requests would fail. |
-| `MES_<TOOL>_ENABLED` | see [Tools](tools.md) | Enables an opt-in tool: `FFPROBE`, `IMAGEMAGICK`, `METAFLAC`, `FILE_SCRAPER`, `TIKA`. |
-| `MES_<TOOL>_COMMAND` | tool name | Binary path for `EXIFTOOL`, `MEDIAINFO`, `FFPROBE`, `IMAGEMAGICK` (`identify`), `METAFLAC`, `FILE_SCRAPER` (`scraper`). |
+| `MES_<TOOL>_ENABLED` | see [Tools](tools.md) | Enables an opt-in tool: `FFPROBE`, `IMAGEMAGICK`, `METAFLAC`, `JHOVE`, `VERAPDF`, `FILE_SCRAPER`, `TIKA`. |
+| `MES_<TOOL>_COMMAND` | tool name | Binary path for `EXIFTOOL`, `MEDIAINFO`, `FFPROBE`, `IMAGEMAGICK` (`identify`), `METAFLAC`, `JHOVE`, `VERAPDF`, `FILE_SCRAPER` (`scraper`). |
+| `MES_VERAPDF_FEATURES` | technical-metadata list | Comma-separated veraPDF `--extract` features. Default: `informationDict,metadata,lowLevelInfo,page,font,iccProfile,colorSpace,outputIntent,embeddedFile,imageXobject`. |
 | `MES_FILE_SCRAPER_SKIP_WELLFORMED` | `false` | Adds `--skip-wellformed-check` to File Scraper. |
 | `MES_TIKA_URL` | `http://tika:9998` | Tika server URL. |
 
 ## Dockerfile build args
 
-| Argument | Default | Installs |
-|---|---|---|
-| `INSTALL_EXIFTOOL` | `true` | ExifTool |
-| `INSTALL_MEDIAINFO` | `true` | MediaInfo |
-| `INSTALL_FFPROBE` | `false` | FFprobe |
-| `INSTALL_IMAGEMAGICK` | `false` | ImageMagick |
-| `INSTALL_METAFLAC` | `false` | metaflac (the `flac` package) |
-| `INSTALL_FILE_SCRAPER` | `false` | File Scraper and its dependencies (several hundred MB) |
+With docker compose there is no separate install setting: each local tool is installed in the image when its `MES_<TOOL>_ENABLED` is `true` (ExifTool and MediaInfo by default), and you rebuild after changing it. Compose passes this to the `Dockerfile` as `INSTALL_<TOOL>` build args (`EXIFTOOL`, `MEDIAINFO`, `FFPROBE`, `IMAGEMAGICK`, `METAFLAC`, `JHOVE`, `VERAPDF`, `FILE_SCRAPER`); set those directly only with plain `docker build --build-arg`. JHOVE and veraPDF are already included by File Scraper.
 
 The remaining `ARG`s in `service/Dockerfile` (`FILE_SCRAPER_REF`, `JHOVE_JAR_URL`, `VERAPDF_VERSION` and so on) pin the versions of File Scraper's components.
 
