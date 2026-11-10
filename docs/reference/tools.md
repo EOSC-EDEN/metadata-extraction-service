@@ -16,4 +16,4 @@ The tools MES can call. `GET /api/v1/tools/` lists them with their state in a ru
 
 ExifTool and MediaInfo can be disabled with `MES_EXIFTOOL_ENABLED=false` and `MES_MEDIAINFO_ENABLED=false`. To enable an opt-in tool, see [Enable optional tools](../how-to/optional-tools.md). To add another, see [Add a tool](../adding-a-tool.md).
 
-Which tools run for a request is decided by [local format rules](../how-to/local-format-rules.md): with no matching rule every enabled tool runs, otherwise only the tools named by the matching rules (the default tool runs only when no rule matches). Selection through a File Format Library is planned but not implemented.
+Which tools run for a request is decided by [local format rules](../how-to/local-format-rules.md): only the tools named by the matching rules run; with no matching rule, only the default tool runs. Selection through a File Format Library is planned but not implemented.

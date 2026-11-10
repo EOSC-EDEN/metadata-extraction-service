@@ -12,7 +12,7 @@ The Metadata Extraction Service (MES) is being developed as part of EOSC EDEN, i
 
 No single extraction tool can capture all relevant internal metadata for the diverse range of file formats managed by a Trusted Digital Archive. MES addresses this by:
 
-- Invoking one or more metadata extraction tools for a file. Today every enabled tool runs, or only the tools named by local format rules (matching a PUID or file extension); the default tool is the fallback when no rule matches. The caller can supply a PUID or MIME type, or the service can identify the file through FFIS. Selection through a File Format Library such as the [KU Leuven File Format Library](https://github.com/libis/teneo-format_library) is planned but not implemented.
+- Invoking one or more metadata extraction tools for a file. Today only the tools named by local format rules (matching a PUID or file extension) run; the default tool is the only tool that runs when no rule matches. The caller can supply a PUID or MIME type, or the service can identify the file through FFIS. Selection through a File Format Library such as the [KU Leuven File Format Library](https://github.com/libis/teneo-format_library) is planned but not implemented.
 - Aggregating the raw, unmodified output of each tool, labelled with the tool that produced it and its execution status.
 - Returning results through a standardised REST API, in both XML and JSON, for one or more files per request. Extraction from a whole Submission/Archival Information Package (per the [SIP2AIP Factory specification](https://github.com/EOSC-EDEN/wp2-oais-packaging-information)) is not implemented yet.
 - Supporting extensibility, so new extraction tools can be added behind adapters without changing the core wrapper logic.

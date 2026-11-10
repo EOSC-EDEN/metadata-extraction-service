@@ -20,6 +20,7 @@ class FakeFFISClient:
         return self.result
 
 
+@override_settings(MES_TOOL_RULES_FILE="/nonexistent/tool_rules.yaml")
 class ResolveToolsTests(TestCase):
     def test_caller_supplied_identifier_never_calls_ffis(self):
         ffis = FakeFFISClient()
@@ -29,7 +30,7 @@ class ResolveToolsTests(TestCase):
         self.assertEqual(ffis.calls, [])
         self.assertEqual(resolution.selection_method, "default_tool_caller_identified")
         self.assertEqual(resolution.puid, "fmt/43")
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "mediainfo"])
+        self.assertEqual([t.name for t in resolution.tools], ["exiftool"])
 
     @override_settings(MES_FFIS_ENABLED=False)
     def test_ffis_disabled_uses_default_tool_without_calling_ffis(self):
@@ -56,7 +57,7 @@ class ResolveToolsTests(TestCase):
         self.assertEqual(resolution.warnings, ["w"])
         self.assertEqual(resolution.ffis_provenance, {"outcome": "warning"})
         self.assertEqual(resolution.identification_url, "http://ffis.test")
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "mediainfo"])
+        self.assertEqual([t.name for t in resolution.tools], ["exiftool"])
 
     @override_settings(MES_FFIS_ENABLED=True)
     def test_ffis_inconclusive_falls_back_with_warning(self):
@@ -88,9 +89,10 @@ class ResolveToolsTests(TestCase):
 _TOOL = {"adapter": "x.Adapter", "kind": "subprocess"}
 
 
-class ResolveAllEnabledToolsTests(TestCase):
+class ResolveDefaultToolOnlyTests(TestCase):
     @override_settings(
         MES_FFIS_ENABLED=False,
+        MES_TOOL_RULES_FILE="/nonexistent/tool_rules.yaml",
         MES_DEFAULT_TOOL="b",
         MES_TOOLS={
             "a": _TOOL,
@@ -99,10 +101,10 @@ class ResolveAllEnabledToolsTests(TestCase):
             "d": {**_TOOL, "enabled": True},
         },
     )
-    def test_runs_all_enabled_tools_default_first_and_skips_disabled(self):
+    def test_runs_only_the_default_tool_when_no_rule_matches(self):
         resolution = resolve_tools("/f")
 
-        self.assertEqual([t.name for t in resolution.tools], ["b", "a", "d"])
+        self.assertEqual([t.name for t in resolution.tools], ["b"])
 
 
 _RULES_TOOLS = {
@@ -160,14 +162,14 @@ class LocalRuleResolutionTests(TestCase):
         self.assertEqual([t.name for t in resolution.tools], ["mediainfo"])
         self.assertEqual(resolution.matched_rules, ["wav"])
 
-    def test_no_match_falls_through_to_all_enabled_tools(self):
+    def test_no_match_falls_back_to_the_default_tool_only(self):
         resolution = self.resolve(
             "rules:\n- {name: jpeg, puids: [fmt/43], tools: [ffprobe]}\n",
             puid="fmt/1",
             filename="a.bin",
         )
         self.assertEqual(resolution.selection_method, "default_tool_caller_identified")
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "mediainfo", "ffprobe"])
+        self.assertEqual([t.name for t in resolution.tools], ["exiftool"])
         self.assertEqual(resolution.matched_rules, [])
 
     def test_or_and_match_all_semantics(self):

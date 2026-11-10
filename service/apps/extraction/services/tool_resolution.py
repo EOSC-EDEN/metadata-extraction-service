@@ -1,11 +1,10 @@
 """Decide which extraction tools run for a request.
 
 Local format rules (`tool_rules.py`) win when one matches: only the matched tools run. The default
-tool is the fallback: it runs only when no rule matched (or the matched rules left no enabled tool). Otherwise, until the FormatLibraryClient lands, every request runs all enabled
-tools (the default tool first). When the caller supplies no PUID/MIME and FFIS is
-enabled, FFIS identifies the file and the result is recorded for the
-response and provenance. The Format Library hand-off replaces the "always
-all enabled tools" part.
+tool is the fallback: it is the only tool that runs when no rule matched (the format could not be
+identified or no rule covers it) or when the matched rules left no enabled tool. When the caller
+supplies no PUID/MIME and FFIS is enabled, FFIS identifies the file and the result is recorded for
+the response and provenance. The Format Library hand-off replaces the local rules.
 """
 
 import os
@@ -19,7 +18,6 @@ from apps.extraction.tool_config import (
     ToolConfig,
     get_default_tool,
     get_tool_config,
-    list_tool_configs,
 )
 from apps.extraction.tool_rules import load_tool_rules, match_rules
 
@@ -93,9 +91,7 @@ def _apply_local_rules(resolution: ToolResolution, filename) -> ToolResolution:
 def _identify(file_path, puid, mime_type, ffis_client) -> ToolResolution:
     default_tool = get_default_tool()  # raises ToolNotConfigured (MES-REQ-1-001)
 
-    tools = [default_tool] + [
-        t for t in list_tool_configs() if t.enabled and t.name != default_tool.name
-    ]
+    tools = [default_tool]
 
     def resolution(selection_method, **kwargs):
         return ToolResolution(tools=tools, selection_method=selection_method, **kwargs)

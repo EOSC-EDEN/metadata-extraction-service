@@ -11,6 +11,7 @@ def _upload(content=b"data", name="photo.jpg"):
     return SimpleUploadedFile(name, content, content_type="image/jpeg")
 
 
+@override_settings(MES_TOOL_RULES_FILE="/nonexistent/tool_rules.yaml")
 class ExtractViewTests(TestCase):
     def setUp(self):
         self.client = APIClient()

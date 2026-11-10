@@ -47,12 +47,12 @@ class LocalRuleEndpointTests(JobsViewTestCase):
         self.assertEqual(body["provenance"]["matched_rules"], ["jpeg-only"])
         self.assertIn("jpeg-only", body["provenance"]["event"]["eventDetailInformation"][0]["eventDetail"])
 
-    def test_extension_without_a_rule_runs_all_enabled_tools(self, _run):
+    def test_extension_without_a_rule_runs_only_the_default_tool(self, _run):
         body = self.extract(file=_upload(name="photo.png")).json()
         resolution = body["tool_resolution"]
         self.assertEqual(resolution["selection_method"], "default_tool_ffis_disabled")
         self.assertEqual(resolution["matched_rules"], [])
-        self.assertEqual(resolution["resolved_tools"], ["exiftool", "mediainfo"])
+        self.assertEqual(resolution["resolved_tools"], ["exiftool"])
 
     def test_async_result_equals_the_sync_result(self, _run):
         sync = self.extract().json()

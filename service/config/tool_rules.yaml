@@ -4,7 +4,7 @@
 #
 # A rule matches on its PUID OR its extension (match: any, the default), or on both (match: all).
 # When at least one rule matches, only the tools of ALL matching rules (de-duplicated) run. The default
-# tool (MES_DEFAULT_TOOL) is the fallback: it runs only when no rule matches. Without a match, tool selection is unchanged.
+# tool (MES_DEFAULT_TOOL) is the fallback: it is the only tool that runs when no rule matches.
 # A rule naming a disabled tool, or one that is not in MES_TOOLS, skips it with a warning (startup logs the unknown ones).
 #
 # rules:
@@ -444,7 +444,7 @@ rules:
     tools: [jhove, verapdf]
   - name: acrobat-pdf-1_7
     puids: [fmt/276]
-    extensions: [pdf]
+    extensions: [pdf] 
     tools: [jhove, verapdf]
   - name: acrobat-pdf-a
     puids: [fmt/1910, fmt/1911, fmt/1912, fmt/354, fmt/476, fmt/477, fmt/478, fmt/479, fmt/480, fmt/481, fmt/95]

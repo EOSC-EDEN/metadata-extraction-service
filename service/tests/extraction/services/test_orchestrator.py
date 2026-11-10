@@ -21,6 +21,7 @@ def _unsaved_tool(name, is_mandatory=False):
     )
 
 
+@override_settings(MES_TOOL_RULES_FILE="/nonexistent/tool_rules.yaml")
 class ExtractEndToEndTests(TestCase):
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
     def test_extract_uses_the_seeded_default_tool(self, mock_run):
@@ -31,7 +32,7 @@ class ExtractEndToEndTests(TestCase):
         result = ExtractionOrchestrator().extract("/tmp/file.jpg")
 
         self.assertEqual(result.selection_method, "default_tool_ffis_disabled")
-        self.assertEqual(result.resolved_tools, ("exiftool", "mediainfo"))
+        self.assertEqual(result.resolved_tools, ("exiftool",))
         self.assertEqual(result.results[0].status, ToolExecutionStatus.SUCCESS)
         self.assertEqual(result.errors, [])
 
@@ -56,7 +57,7 @@ class ExtractEndToEndTests(TestCase):
         self.assertEqual((result.puid, result.mime_type), ("fmt/43", "image/jpeg"))
         self.assertEqual(result.warnings, ["engines disagree"])
         self.assertEqual(result.ffis_provenance["outcome"], "warning")
-        self.assertEqual(result.resolved_tools, ("exiftool", "mediainfo"))
+        self.assertEqual(result.resolved_tools, ("exiftool",))
 
 
 class RunAggregationTests(SimpleTestCase):
