@@ -98,7 +98,6 @@ rules:
             "empty puids and extensions": "rules:\n- {name: a, puids: [], extensions: [], tools: [exiftool]}\n",
             "missing tools": "rules:\n- {name: a, puids: [fmt/1]}\n",
             "empty tools": "rules:\n- {name: a, puids: [fmt/1], tools: []}\n",
-            "unknown tool": "rules:\n- {name: a, puids: [fmt/1], tools: [nosuchtool]}\n",
             "unknown key": "rules:\n- {name: a, puids: [fmt/1], tools: [exiftool], colour: red}\n",
             "puids not a list": "rules:\n- {name: a, puids: fmt/1, tools: [exiftool]}\n",
             "puid not a string": "rules:\n- {name: a, puids: [1], tools: [exiftool]}\n",
@@ -110,6 +109,15 @@ rules:
             with self.subTest(label), override_settings(MES_TOOL_RULES_FILE=_write(self, content)):
                 with self.assertRaises(ImproperlyConfigured):
                     validate_tool_rules()
+
+    def test_unknown_tool_logs_a_warning_instead_of_failing(self):
+        content = "rules:\n- {name: a, puids: [fmt/1], tools: [nosuchtool, exiftool]}\n"
+        with override_settings(MES_TOOL_RULES_FILE=_write(self, content)):
+            with self.assertLogs("apps.extraction.tool_rules", level="WARNING") as logs:
+                validate_tool_rules()
+        self.assertEqual(len(logs.records), 1)
+        self.assertIn("a", logs.output[0])
+        self.assertIn("nosuchtool", logs.output[0])
 
     def test_unreadable_path_fails_validation(self):
         with override_settings(MES_TOOL_RULES_FILE=tempfile.gettempdir()):  # a directory

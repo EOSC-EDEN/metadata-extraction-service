@@ -1,7 +1,7 @@
 """Decide which extraction tools run for a request.
 
-Local format rules (`tool_rules.py`) win when one matches: only the matched tools plus the default
-tool run. Otherwise, until the FormatLibraryClient lands, every request runs all enabled
+Local format rules (`tool_rules.py`) win when one matches: only the matched tools run. The default
+tool is the fallback: it runs only when no rule matched (or the matched rules left no enabled tool). Otherwise, until the FormatLibraryClient lands, every request runs all enabled
 tools (the default tool first). When the caller supplies no PUID/MIME and FFIS is
 enabled, FFIS identifies the file and the result is recorded for the
 response and provenance. The Format Library hand-off replaces the "always
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from django.conf import settings
 
-from apps.extraction.exceptions import FFISUnavailable
+from apps.extraction.exceptions import FFISUnavailable, ToolNotConfigured
 from apps.extraction.services.format_identification import FFISClient
 from apps.extraction.tool_config import (
     ToolConfig,
@@ -53,12 +53,19 @@ def _apply_local_rules(resolution: ToolResolution, filename) -> ToolResolution:
         return resolution
 
     default_tool = resolution.tools[0]
-    tools, warnings, skipped = [default_tool], list(resolution.warnings), set()
+    tools, warnings, skipped = [], list(resolution.warnings), set()
     for rule in matched:
         for name in rule.tools:
             if name in skipped or any(t.name == name for t in tools):
                 continue
-            config = get_tool_config(name)
+            try:
+                config = get_tool_config(name)
+            except ToolNotConfigured:
+                skipped.add(name)
+                warnings.append(
+                    f"tool_rule_unknown_tool: rule '{rule.name}' names the unknown tool '{name}'; skipped."
+                )
+                continue
             if config.enabled:
                 tools.append(config)
             else:
@@ -66,6 +73,9 @@ def _apply_local_rules(resolution: ToolResolution, filename) -> ToolResolution:
                 warnings.append(
                     f"tool_rule_disabled_tool: rule '{rule.name}' names the disabled tool '{name}'; skipped."
                 )
+    if not tools:
+        # Every tool the rules named is disabled: nothing matched usable, so fall back to the default tool.
+        tools = [default_tool]
     # "via FFIS" only when FFIS supplied the PUID that the rules were matched against.
     via_ffis = resolution.selection_method == "default_tool_ffis_identified" and bool(resolution.puid)
     return ToolResolution(

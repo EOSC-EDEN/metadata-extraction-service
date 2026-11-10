@@ -143,11 +143,11 @@ class LocalRuleResolutionTests(TestCase):
         self.assertEqual(resolution.selection_method, "default_tool_caller_identified")
         self.assertEqual(resolution.matched_rules, [])
 
-    def test_puid_rule_limits_tools_to_default_plus_matched(self):
+    def test_puid_rule_limits_tools_to_matched_only(self):
         resolution = self.resolve(
             "rules:\n- {name: jpeg, puids: [fmt/43], tools: [ffprobe]}\n", puid="fmt/43"
         )
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "ffprobe"])
+        self.assertEqual([t.name for t in resolution.tools], ["ffprobe"])
         self.assertEqual(resolution.selection_method, "local_rule")
         self.assertEqual(resolution.matched_rules, ["jpeg"])
         self.assertEqual(resolution.puid, "fmt/43")
@@ -157,7 +157,7 @@ class LocalRuleResolutionTests(TestCase):
             "rules:\n- {name: wav, extensions: ['.WAV'], tools: [mediainfo]}\n",
             filename="Sound.Wav",
         )
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "mediainfo"])
+        self.assertEqual([t.name for t in resolution.tools], ["mediainfo"])
         self.assertEqual(resolution.matched_rules, ["wav"])
 
     def test_no_match_falls_through_to_all_enabled_tools(self):
@@ -181,7 +181,7 @@ class LocalRuleResolutionTests(TestCase):
         both = self.resolve(rules, puid="fmt/43", filename="a.jpg")
         self.assertEqual(both.matched_rules, ["either", "both"])
 
-    def test_several_rules_union_deduplicated_default_first(self):
+    def test_several_rules_union_deduplicated_in_rule_order(self):
         resolution = self.resolve(
             "rules:\n"
             "- {name: a, puids: [fmt/43], tools: [ffprobe, exiftool]}\n"
@@ -189,26 +189,42 @@ class LocalRuleResolutionTests(TestCase):
             puid="fmt/43",
             filename="a.jpg",
         )
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "ffprobe", "mediainfo"])
+        self.assertEqual([t.name for t in resolution.tools], ["ffprobe", "exiftool", "mediainfo"])
         self.assertEqual(resolution.matched_rules, ["a", "b"])
 
-    def test_default_tool_kept_and_first_when_rule_omits_it(self):
+    def test_default_tool_not_run_when_a_rule_matches_without_it(self):
         resolution = self.resolve(
             "rules:\n- {name: a, puids: [fmt/43], tools: [mediainfo]}\n", puid="fmt/43"
         )
-        self.assertEqual(resolution.tools[0].name, "exiftool")
+        self.assertEqual([t.name for t in resolution.tools], ["mediainfo"])
 
     def test_disabled_tool_is_skipped_with_a_warning(self):
         resolution = self.resolve(
             "rules:\n- {name: a, puids: [fmt/43], tools: [imagemagick, mediainfo]}\n", puid="fmt/43"
         )
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "mediainfo"])
+        self.assertEqual([t.name for t in resolution.tools], ["mediainfo"])
         self.assertEqual(len(resolution.warnings), 1)
         self.assertTrue(resolution.warnings[0].startswith("tool_rule_disabled_tool"))
         self.assertIn("imagemagick", resolution.warnings[0])
         self.assertIn("a", resolution.warnings[0])
 
-    def test_rule_wins_even_when_it_names_only_disabled_tools(self):
+    def test_unknown_tool_is_skipped_with_a_warning(self):
+        resolution = self.resolve(
+            "rules:\n- {name: a, puids: [fmt/43], tools: [nosuchtool, mediainfo]}\n", puid="fmt/43"
+        )
+        self.assertEqual([t.name for t in resolution.tools], ["mediainfo"])
+        self.assertEqual(len(resolution.warnings), 1)
+        self.assertTrue(resolution.warnings[0].startswith("tool_rule_unknown_tool"))
+        self.assertIn("nosuchtool", resolution.warnings[0])
+        self.assertIn("a", resolution.warnings[0])
+
+    def test_rule_naming_only_unknown_tools_falls_back_to_the_default_tool(self):
+        resolution = self.resolve(
+            "rules:\n- {name: a, puids: [fmt/43], tools: [nosuchtool]}\n", puid="fmt/43"
+        )
+        self.assertEqual([t.name for t in resolution.tools], ["exiftool"])
+
+    def test_default_tool_is_fallback_when_rule_names_only_disabled_tools(self):
         resolution = self.resolve(
             "rules:\n- {name: a, puids: [fmt/43], tools: [imagemagick]}\n", puid="fmt/43"
         )
@@ -222,7 +238,7 @@ class LocalRuleResolutionTests(TestCase):
             resolution = resolve_tools("/f", ffis_client=ffis)
         self.assertEqual(ffis.calls, ["/f"])
         self.assertEqual(resolution.selection_method, "local_rule_via_ffis")
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "ffprobe"])
+        self.assertEqual([t.name for t in resolution.tools], ["ffprobe"])
         self.assertEqual(resolution.warnings, ["w"])
         self.assertEqual(resolution.ffis_provenance, {"outcome": "ok"})
         self.assertEqual(resolution.identification_url, "http://ffis.test")
@@ -241,7 +257,7 @@ class LocalRuleResolutionTests(TestCase):
             resolution = resolve_tools("/f", ffis_client=ffis, filename="a.jpg")
         self.assertEqual(ffis.calls, ["/f"])
         self.assertEqual(resolution.selection_method, "local_rule")
-        self.assertEqual([t.name for t in resolution.tools], ["exiftool", "ffprobe"])
+        self.assertEqual([t.name for t in resolution.tools], ["ffprobe"])
         self.assertTrue(any(w.startswith("ffis_unreachable") for w in resolution.warnings))
 
     def test_rules_take_precedence_over_a_mime_only_caller_identification(self):

@@ -11,13 +11,26 @@ rules:
     match: any             # optional: "any" (PUID or extension, default) or "all" (both; needs both lists)
 ```
 
+## Where the shipped rules come from
+
+The rules in `service/config/tool_rules.yaml` are not written from scratch. They are:
+
+- **An extraction of the Format Policy Registry (FPR) in Archivematica.** The FPR's format-to-tool mappings were converted into local rules, one per format, matching on PUID and extension.
+- **Two separate additions** that do not come from the FPR:
+    - one rule for **FLAC** files (`flac-audio`, using `metaflac`);
+    - a set of rules for **all PDF-related formats** (the `acrobat-pdf-*` rules and related PDF variants, using `jhove` and `verapdf`).
+
+These rules are a temporary solution. They stand in for the missing integration with the File Format Library, which is the intended way to map file formats to extraction tools. Once that integration is available, the shipped rules are expected to be retired.
+
+Edit or replace any of these rules to fit your deployment.
+
 ## Rules
 
-- Each rule needs at least one of `puids` and `extensions`, and a non-empty `tools` list. A tool that is not in `MES_TOOLS`, an unknown key or invalid YAML stops startup.
+- Each rule needs at least one of `puids` and `extensions`, and a non-empty `tools` list. An unknown key or invalid YAML stops startup. A tool that is not in `MES_TOOLS` does not: startup logs a warning.
 - The PUID is the one you supplied or, when you supplied no PUID or MIME type and [FFIS](ffis.md) is enabled, the one FFIS identified.
 - The extension comes from the uploaded filename (`photo.JPG` becomes `jpg`; for `a.tar.gz` only `gz`).
-- All matching rules apply and their tools are combined. When at least one rule matches, **only** those tools plus the default tool (`MES_DEFAULT_TOOL`, always first) run. With no match, tool selection is unchanged (every enabled tool runs).
-- A rule naming a disabled tool skips it and adds the warning `tool_rule_disabled_tool`.
+- All matching rules apply and their tools are combined. When at least one rule matches, **only** those tools run; the default tool (`MES_DEFAULT_TOOL`) is not added. The default tool is the fallback: it runs (first, with every other enabled tool) only when no rule matches, or when the matching rules name only disabled tools.
+- A rule naming a disabled tool skips it and adds the warning `tool_rule_disabled_tool`. A rule naming a tool that is not in `MES_TOOLS` skips it and adds the warning `tool_rule_unknown_tool`.
 
 ## See what applies
 

@@ -4,7 +4,7 @@ The Metadata Extraction Service (MES) is an extensible service that combines sev
 
 MES does the following:
 
-- Runs one or more extraction tools on a file. Today every enabled tool runs, or the tools named by [local format rules](how-to/local-format-rules.md) plus the default tool.
+- Runs one or more extraction tools on a file. Today every enabled tool runs, or the tools named by [local format rules](how-to/local-format-rules.md) only. The default tool is the fallback when no rule matches.
 - Aggregates the raw, unmodified output of each tool, labelled with the tool and its execution status.
 - Returns the result through a REST API in JSON or XML, for one or more files per request.
 - Lets you add new tools behind adapters without changing the core logic.

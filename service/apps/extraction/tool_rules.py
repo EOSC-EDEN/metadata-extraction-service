@@ -15,12 +15,15 @@ File shape::
         match: any                # optional: "any" (PUID or extension, default) or "all" (both)
 """
 
+import logging
 import os
 from dataclasses import dataclass
 
 import yaml
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
+logger = logging.getLogger(__name__)
 
 MATCH_MODES = ("any", "all")
 _RULE_KEYS = {"name", "puids", "extensions", "tools", "match"}
@@ -143,12 +146,15 @@ def load_tool_rules() -> tuple[ToolRule, ...]:
 
 
 def validate_tool_rules() -> None:
-    """Fail at startup on a bad file or a rule naming a tool that is not in `MES_TOOLS`."""
+    """Fail at startup on a bad file. A rule naming a tool that is not in `MES_TOOLS` only logs a warning;
+    the tool is skipped when the rule matches (see `tool_resolution.py`)."""
     for rule in load_tool_rules():
         for tool in rule.tools:
             if tool not in settings.MES_TOOLS:
-                raise ImproperlyConfigured(
-                    f"Tool rule '{rule.name}' names '{tool}', which is not in settings.MES_TOOLS."
+                logger.warning(
+                    "Tool rule '%s' names '%s', which is not in settings.MES_TOOLS; it will be skipped.",
+                    rule.name,
+                    tool,
                 )
 
 

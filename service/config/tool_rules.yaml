@@ -3,9 +3,9 @@
 # Validated at startup; restart is not needed to change rules, the file is re-read when it changes.
 #
 # A rule matches on its PUID OR its extension (match: any, the default), or on both (match: all).
-# When at least one rule matches, only the tools of ALL matching rules (de-duplicated) plus the
-# default tool (MES_DEFAULT_TOOL) run. When no rule matches, tool selection is unchanged.
-# Tool names must exist in MES_TOOLS; a rule naming a disabled tool skips it with a warning.
+# When at least one rule matches, only the tools of ALL matching rules (de-duplicated) run. The default
+# tool (MES_DEFAULT_TOOL) is the fallback: it runs only when no rule matches. Without a match, tool selection is unchanged.
+# A rule naming a disabled tool, or one that is not in MES_TOOLS, skips it with a warning (startup logs the unknown ones).
 #
 # rules:
 #   - name: flac-audio          # unique
@@ -13,4 +13,505 @@
 #     extensions: [flac]        # case-insensitive, leading dot optional
 #     tools: [metaflac]
 #     # match: any              # or "all" (needs both puids and extensions)
-rules: []
+rules:
+  - name: flac-audio
+    puids: [fmt/279] 
+    extensions: [flac]
+    tools: [metaflac]
+  - name: accessdata-custom-content-image
+    puids: [fmt/842, fmt/843]
+    extensions: []
+    tools: [sleuthkit]
+  - name: adaptive-multi-rate-wideband-audio
+    puids: [fmt/954]
+    extensions: [awb]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: adobe-photoshop-large-document-format
+    puids: [fmt/996]
+    extensions: [psb]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: adx-audio-format
+    puids: [fmt/840]
+    extensions: [adx]
+    tools: [mediainfo]
+  - name: animated-portable-network-graphics
+    puids: [fmt/935]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: apple-disk-image
+    puids: [fmt/1071]
+    extensions: []
+    tools: [sleuthkit]
+  - name: apple-prores
+    puids: [fmt/797]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: audio-interchange-file-format
+    puids: [fmt/414, x-fmt/135, x-fmt/136]
+    extensions: [aif, aifc, aiff]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: audiovideo-interleaved
+    puids: [fmt/5]
+    extensions: [avi]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: autodesk-animator-pro-flic
+    puids: [fmt/298]
+    extensions: [flc]
+    tools: [ffprobe, mediainfo]
+  - name: better-portable-graphics
+    puids: [fmt/687]
+    extensions: [bpg]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: bink-video-format
+    puids: [fmt/731, fmt/732]
+    extensions: [bik, bik2]
+    tools: [mediainfo]
+  - name: bitmap
+    puids: []
+    extensions: [bmp, ddb, dib]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: broadcast-wave
+    puids: [fmt/1, fmt/2, fmt/527, fmt/703, fmt/704, fmt/705, fmt/706, fmt/707, fmt/708, fmt/709, fmt/710, fmt/711]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: digital-moving-picture-exchange-bitmap
+    puids: [fmt/193, fmt/541]
+    extensions: [dpx]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: digital-negative-format-dng
+    puids: [fmt/152, fmt/1841, fmt/1842, fmt/1943, fmt/436, fmt/437, fmt/438, fmt/730]
+    extensions: []
+    tools: [exiftool, mediainfo]
+  - name: digital-speech-standard
+    puids: [fmt/1007]
+    extensions: [dss]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: directmusic-segment-file-format
+    puids: [fmt/957]
+    extensions: [sgt]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: directmusic-style-file-format
+    puids: [fmt/958]
+    extensions: [sty]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: dolby-digital-ac-3
+    puids: [fmt/735]
+    extensions: []
+    tools: [mediainfo]
+  - name: dolby-digital-audio
+    puids: []
+    extensions: [ac3]
+    tools: [ffprobe, mediainfo]
+  - name: dolby-mlp-lossless-audio
+    puids: [fmt/972]
+    extensions: [mlp]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: dos-sound-and-music-interface-advanced-module-form
+    puids: [fmt/960]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: downloadable-sounds-audio
+    puids: [fmt/955]
+    extensions: [dls]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: dss-pro
+    puids: [fmt/1008]
+    extensions: [ds2]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: dts-coherent-acoustics-dca-audio
+    puids: [fmt/973]
+    extensions: [dts]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: encapsulated-postscript
+    puids: [fmt/122, fmt/123, fmt/124]
+    extensions: [eps, epsf]
+    tools: [exiftool]
+  - name: esri-world-file
+    puids: [fmt/367]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: exchangeable-image-audio
+    puids: [x-fmt/389, x-fmt/396, x-fmt/397]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: exchangeable-image-file-format-compressed
+    puids: [fmt/1507, fmt/645, x-fmt/390, x-fmt/391, x-fmt/398]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: exchangeable-image-uncompressed
+    puids: [x-fmt/387, x-fmt/388]
+    extensions: []
+    tools: [exiftool, mediainfo]
+  - name: fat-disk-image
+    puids: [fmt/1087]
+    extensions: []
+    tools: [sleuthkit]
+  - name: free-lossless-image-format-flif
+    puids: [fmt/872]
+    extensions: [flif]
+    tools: [ffprobe]
+  - name: g64-gcr-encoded-disk-image-format
+    puids: [fmt/821]
+    extensions: [g41]
+    tools: [sleuthkit]
+  - name: geotiff
+    puids: [fmt/155]
+    extensions: []
+    tools: [exiftool, mediainfo]
+  - name: gerber-format
+    puids: [fmt/664]
+    extensions: [gbr]
+    tools: [ffprobe]
+  - name: graphics-interchange-format
+    puids: [fmt/3, fmt/4]
+    extensions: [gif, giff]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: interleaved-adx-audio-format-aix
+    puids: [fmt/841]
+    extensions: [aix]
+    tools: [mediainfo]
+  - name: iso-disk-image-file
+    puids: [fmt/468]
+    extensions: [iso]
+    tools: [sleuthkit]
+  - name: jamcracker-tracker-module
+    puids: [fmt/975]
+    extensions: [jam]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: jeffs-image-format
+    puids: [fmt/994]
+    extensions: [jif]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: jp2-part-1
+    puids: [x-fmt/392]
+    extensions: [jp2]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: jpeg-xl
+    puids: [fmt/1485]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: jpeg-xl-codestream
+    puids: [fmt/1484]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: jpg
+    puids: [fmt/42, fmt/43, fmt/44]
+    extensions: [jfif, jpe, jpeg, jpg]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: krita-document-format
+    puids: [fmt/999]
+    extensions: [kra]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: macintosh-pict
+    puids: [fmt/341, x-fmt/80]
+    extensions: [pct, pict]
+    tools: [exiftool, ffprobe]
+  - name: magick-image-file-format
+    puids: [fmt/930]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: microsoft-document-imaging-file-format
+    puids: [fmt/881]
+    extensions: [mdi]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: microsoft-paint
+    puids: [fmt/912]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: microsoft-picture-it-image-file
+    puids: [fmt/936]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: microsoft-windows-movie-maker-file
+    puids: [fmt/971]
+    extensions: [mswmm]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: microsoft-xwma
+    puids: [fmt/923]
+    extensions: [xwma]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: midi-audio
+    puids: [x-fmt/230]
+    extensions: [mid]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: minolta-raw
+    puids: [fmt/669]
+    extensions: []
+    tools: [ffprobe]
+  - name: mobile-extensible-music-format
+    puids: [fmt/961]
+    extensions: [mxmf]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-1-2-audio-layer-1
+    puids: [fmt/347]
+    extensions: [mp1]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-1-2-audio-layer-3
+    puids: [fmt/134]
+    extensions: [mp3]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-1-program
+    puids: [x-fmt/385]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-2-program
+    puids: [x-fmt/386]
+    extensions: [m2v]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-4-media
+    puids: [fmt/199]
+    extensions: [m4a, m4v, mp4]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-audio-stream-layer-2
+    puids: [fmt/198]
+    extensions: [mp2]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: mpeg-video
+    puids: []
+    extensions: [mpeg, mpg]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: multiple-image-network-graphics
+    puids: [fmt/528]
+    extensions: [mng]
+    tools: [exiftool, ffprobe]
+  - name: nearly-raw-raster-data
+    puids: [fmt/1002, fmt/1003, fmt/1004, fmt/1005, fmt/1006]
+    extensions: [nrrd]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: ogg-flac-compressed-multimedia-file
+    puids: [fmt/947]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: ogg-multimedia-container
+    puids: [fmt/944]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: ogg-opus-codec-compressed-multimedia-file
+    puids: [fmt/946]
+    extensions: [ogg]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: ogg-speex-codec-multimedia-file
+    puids: [fmt/948]
+    extensions: [ogg]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: ogg-theora-video
+    puids: [fmt/945]
+    extensions: [ogv]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: olympus-raw
+    puids: [fmt/668]
+    extensions: []
+    tools: [ffprobe]
+  - name: openexr
+    puids: [fmt/1001]
+    extensions: [exr]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: os2-bitmap
+    puids: [x-fmt/25, x-fmt/270]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: panasonic-raw
+    puids: [fmt/662]
+    extensions: [rw2]
+    tools: [ffprobe]
+  - name: png
+    puids: [fmt/11, fmt/12, fmt/13]
+    extensions: [png]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: portable-pixel-map-ascii
+    puids: [x-fmt/178]
+    extensions: [ppm]
+    tools: [exiftool, ffprobe]
+  - name: portable-sound-format
+    puids: [fmt/959]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: qcp-audio-file-format
+    puids: [fmt/962]
+    extensions: [qcp]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: quicktime
+    puids: [x-fmt/384]
+    extensions: [mov]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: raw-disk-image
+    puids: [archivematica-fmt/4]
+    extensions: []
+    tools: [sleuthkit]
+  - name: raw-jpeg-stream
+    puids: [fmt/41]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: rf64
+    puids: [fmt/712]
+    extensions: []
+    tools: [mediainfo]
+  - name: rf64-multichannel-broadcast-wave-format
+    puids: [fmt/713]
+    extensions: []
+    tools: [mediainfo]
+  - name: riff-based-midi
+    puids: [fmt/956]
+    extensions: [rmi]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: safeguard-encrypted-virtual-disk
+    puids: [fmt/887]
+    extensions: [vol]
+    tools: [sleuthkit]
+  - name: sonic-foundry-wave-64
+    puids: [fmt/951]
+    extensions: [w64]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: still-picture-interchange-file-format
+    puids: [fmt/112, fmt/113]
+    extensions: [spf]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: tagged-image-file-format
+    puids: [fmt/10, fmt/353, fmt/7, fmt/8, fmt/9, x-fmt/399]
+    extensions: [dng, tif, tiff]
+    tools: [exiftool, mediainfo]
+  - name: tga
+    puids: [fmt/402, x-fmt/367]
+    extensions: [afi, bpx, icb, tga, vda, vst]
+    tools: [ffprobe, mediainfo]
+  - name: tiff-ep
+    puids: [fmt/154]
+    extensions: []
+    tools: [exiftool, mediainfo]
+  - name: tiff-fx
+    puids: [fmt/156]
+    extensions: []
+    tools: [exiftool, mediainfo]
+  - name: tiff-it
+    puids: [fmt/153]
+    extensions: []
+    tools: [exiftool, mediainfo]
+  - name: true-audio
+    puids: [fmt/952, fmt/953]
+    extensions: [tta]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: video-object-file-mpeg-2-subset
+    puids: [fmt/425]
+    extensions: [vob]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: wav
+    puids: [fmt/6]
+    extensions: [wav]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: waveform-audio-pcwave
+    puids: [fmt/141]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: waveform-audio-waveex
+    puids: [fmt/142]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: windows-bitmap
+    puids: [fmt/114, fmt/115, fmt/116, fmt/117, fmt/118, fmt/119]
+    extensions: []
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: zoomify-image-format
+    puids: [fmt/898]
+    extensions: [zif]
+    tools: [exiftool, ffprobe, mediainfo]
+  - name: acrobat-pdf-1_0
+    puids: [fmt/14]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_1
+    puids: [fmt/15]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_2
+    puids: [fmt/16]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_3
+    puids: [fmt/17]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_4
+    puids: [fmt/18]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_5
+    puids: [fmt/19]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_6
+    puids: [fmt/20]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-1_7
+    puids: [fmt/276]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-a
+    puids: [fmt/1910, fmt/1911, fmt/1912, fmt/354, fmt/476, fmt/477, fmt/478, fmt/479, fmt/480, fmt/481, fmt/95]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-e-1
+    puids: [fmt/493]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-1-1999
+    puids: [fmt/144]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-1-2001
+    puids: [fmt/145]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-1a-2001
+    puids: [fmt/157]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-1a-2003
+    puids: [fmt/146]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-2-2003
+    puids: [fmt/147]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-3-2002
+    puids: [fmt/158]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-3-2003
+    puids: [fmt/148]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-4
+    puids: [fmt/488]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-4p
+    puids: [fmt/489]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-5g
+    puids: [fmt/490]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-5n
+    puids: [fmt/492]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: acrobat-pdf-x-5pg
+    puids: [fmt/491]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: pdf
+    puids: []
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: pdf-20-portable-document-format
+    puids: [fmt/1129]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+  - name: pdf-portfolio
+    puids: [fmt/1451]
+    extensions: [pdf]
+    tools: [jhove, verapdf]
+
