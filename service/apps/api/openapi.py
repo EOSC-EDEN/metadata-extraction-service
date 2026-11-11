@@ -188,7 +188,7 @@ class LocalRulesAutoSchema(AutoSchema):
                     "name": {"type": "string"},
                     "puids": {"type": "array", "items": {"type": "string"}, "description": "PRONOM identifiers, lower-case."},
                     "extensions": {"type": "array", "items": {"type": "string"}, "description": "File extensions, lower-case, no leading dot."},
-                    "tools": {"type": "array", "items": {"type": "string"}, "description": "Tools that run, in addition to the default tool, when the rule matches."},
+                    "tools": {"type": "array", "items": {"type": "string"}, "description": "Tools that run when the rule matches (the default tool does not run when a rule matches)."},
                     "match": {
                         "type": "string",
                         "enum": ["any", "all"],
