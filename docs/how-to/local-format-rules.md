@@ -29,7 +29,7 @@ Edit or replace any of these rules to fit your deployment.
 - Each rule needs at least one of `puids` and `extensions`, and a non-empty `tools` list. An unknown key or invalid YAML stops startup. A tool that is not in `MES_TOOLS` does not: startup logs a warning.
 - The PUID is the one you supplied or, when you supplied no PUID or MIME type and [FFIS](ffis.md) is enabled, the one FFIS identified.
 - The extension comes from the uploaded filename (`photo.JPG` becomes `jpg`; for `a.tar.gz` only `gz`).
-- All matching rules apply and their tools are combined. When at least one rule matches, **only** those tools run; the default tool (`MES_DEFAULT_TOOL`) is not added. The default tool is the fallback: it runs (first, with every other enabled tool) only when no rule matches, or when the matching rules name only disabled tools.
+- All matching rules apply and their tools are combined. When at least one rule matches, **only** those tools run; the default tool (`MES_DEFAULT_TOOL`) is not added. The default tool is the fallback: it runs, as the only tool, when no rule matches (for example when no format could be identified), or when the matching rules name only disabled tools.
 - A rule naming a disabled tool skips it and adds the warning `tool_rule_disabled_tool`. A rule naming a tool that is not in `MES_TOOLS` skips it and adds the warning `tool_rule_unknown_tool`.
 
 ## See what applies
