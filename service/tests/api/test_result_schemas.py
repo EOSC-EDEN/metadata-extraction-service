@@ -9,10 +9,11 @@ from jsonschema import Draft202012Validator, FormatChecker
 from lxml import etree
 from rest_framework.test import APIClient
 
-from apps.api.renderers import NAMESPACE, PREMIS_NAMESPACE, MESXMLRenderer
+from apps.api.renderers import PREMIS_NAMESPACE, PremisXMLRenderer
+
+from tests.api.premis_schema import premis_xsd
 
 SCHEMA_DIR = Path(__file__).resolve().parents[2] / "apps" / "api" / "schema"
-NS = {"m": NAMESPACE}
 
 
 def _json_validator():
@@ -23,8 +24,13 @@ def _json_validator():
     return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
-def _xsd():
-    return etree.XMLSchema(etree.parse(str(SCHEMA_DIR / "mes-result.xsd")))
+def _premis_xsd():
+    return premis_xsd()
+
+
+def _premis(data):
+    """The standalone PREMIS document of `data` (the only XML form of an extraction result)."""
+    return etree.fromstring(PremisXMLRenderer().render(data))
 
 
 def _event():
@@ -38,7 +44,7 @@ def _event():
     return {
         "eventIdentifier": {"eventIdentifierType": "UUID", "eventIdentifierValue": "abc"},
         "eventType": "metadata extraction",
-        "eventDateTime": "2026-01-01T00:00:02+00:00",
+        "eventDateTime": "2026-01-01T00:00:01+00:00/2026-01-01T00:00:02+00:00",
         "eventDetailInformation": [{"eventDetail": "Metadata extraction with exiftool, mediainfo."}],
         "eventOutcomeInformation": [
             {
@@ -47,8 +53,30 @@ def _event():
             }
         ],
         "linkingAgentIdentifier": [agent("mes-service"), agent("exiftool"), agent("mediainfo")],
-        "linkingObjectIdentifier": [
-            {"linkingObjectIdentifierType": "filename", "linkingObjectIdentifierValue": "photo.jpg"}
+    }
+
+
+def _object():
+    return {
+        "objectCategory": "file",
+        "objectIdentifier": [{"objectIdentifierType": "filepath", "objectIdentifierValue": "photo.jpg"}],
+        "objectCharacteristics": [
+            {
+                "format": [
+                    {
+                        "formatRegistry": {
+                            "formatRegistryName": "PRONOM",
+                            "formatRegistryKey": "fmt/43",
+                            "formatRegistryRole": "specification",
+                        }
+                    },
+                    {"formatRegistry": {"formatRegistryName": "IANA media types", "formatRegistryKey": "image/jpeg"}},
+                ]
+            }
+        ],
+        "linkingEventIdentifier": [
+            {"linkingEventIdentifierType": "UUID", "linkingEventIdentifierValue": "abc"},
+            {"linkingEventIdentifierType": "UUID", "linkingEventIdentifierValue": "def"},
         ],
     }
 
@@ -109,7 +137,8 @@ def _sample(**overrides):
             "timestamp": "2026-01-01T00:00:02+00:00",
             "service_version": "0.1.0",
             "tool_versions": {"exiftool": "12.40", "mediainfo": None},
-            "event": _event(),
+            "object": _object(),
+            "events": [_event(), _event()],
             "agents": _agents(),
             "matched_rules": [],
             "ffis": {"outcome": "success", "tools": [{"name": "siegfried", "score": 0.9, "ok": True, "x": None}]},
@@ -130,97 +159,80 @@ class SchemaTests(SimpleTestCase):
         data["results"][0]["status"] = "weird"
         self.assertFalse(_json_validator().is_valid(data))
 
-    def test_xsd_accepts_rendered_sample(self):
-        xml = etree.fromstring(MESXMLRenderer().render(_sample()))
-        xsd = _xsd()
-        self.assertTrue(xsd.validate(xml), xsd.error_log)
-
-    def test_xsd_accepts_sample_without_ffis(self):
-        data = _sample()
-        data["provenance"]["ffis"] = None
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        xsd = _xsd()
-        self.assertTrue(xsd.validate(xml), xsd.error_log)
-
-    def test_local_rule_sample_validates_in_json_and_xml(self):
-        data = _sample()
-        data["tool_resolution"]["selection_method"] = "local_rule"
-        data["tool_resolution"]["matched_rules"] = ["jpeg", "photos"]
-        data["provenance"]["matched_rules"] = ["jpeg", "photos"]
-        _json_validator().validate(data)
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        self.assertTrue(_xsd().validate(xml), _xsd().error_log)
-        items = xml.findall("m:toolResolution/m:matchedRules/m:item", NS)
-        self.assertEqual([i.text for i in items], ["jpeg", "photos"])
-
-    def test_old_shape_without_matched_rules_still_validates(self):
-        data = _sample()
-        del data["tool_resolution"]["matched_rules"], data["provenance"]["matched_rules"]
-        _json_validator().validate(data)
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        self.assertIsNone(xml.find("m:toolResolution/m:matchedRules", NS))
-        self.assertTrue(_xsd().validate(xml))
-
-    def test_raw_output_is_unmodified_and_escaped(self):
-        xml = etree.fromstring(MESXMLRenderer().render(_sample()))
-        raw = xml.find("m:results/m:result/m:rawOutput", NS)
-        self.assertEqual(raw.text, '[{"a": "<b> & c"}]')
-
-    def test_control_characters_are_base64_encoded(self):
-        data = _sample()
-        data["results"][0]["raw_output"] = "a\x00b\x1f"
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        xsd = _xsd()
-        self.assertTrue(xsd.validate(xml), xsd.error_log)
-        raw = xml.find("m:results/m:result/m:rawOutput", NS)
-        self.assertEqual(raw.get("encoding"), "base64")
-        self.assertEqual(base64.b64decode(raw.text).decode(), "a\x00b\x1f")
-
-    def test_old_shape_without_categories_still_validates(self):
-        data = _sample()
-        self.assertNotIn("error_details", data)
-        _json_validator().validate(data)
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        self.assertIsNone(xml.find("m:errorDetails", NS))
-        self.assertTrue(_xsd().validate(xml))
-
-    def test_categorised_sample_validates_in_json_and_xml(self):
-        data = _sample()
-        data["results"][1].update(
-            errors=["boom\x00"],
-            error_categories=["wrong_format"],
-            error_details=[{"message": "boom\x00", "category": "wrong_format"}],
-        )
-        data.update(
-            errors=["e"], error_categories=["encrypted"],
-            error_details=[{"message": "e", "category": "encrypted"}],
-        )
-        _json_validator().validate(data)
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        xsd = _xsd()
-        self.assertTrue(xsd.validate(xml), xsd.error_log)
-        self.assertEqual(xml.find("m:errorCategories/m:item", NS).text, "encrypted")
-        msg = xml.findall("m:results/m:result", NS)[1].find("m:errorDetails/m:errorDetail/m:message", NS)
-        self.assertEqual(msg.get("encoding"), "base64")
-
     def test_unknown_category_is_rejected(self):
         data = _sample(error_categories=["bogus"])
         self.assertFalse(_json_validator().is_valid(data))
 
-    def test_event_and_agents_are_required_in_json(self):
-        for key in ("event", "agents"):
+    def test_premis_document_of_the_sample_validates(self):
+        xml = _premis(_sample())
+        self.assertTrue(_premis_xsd().validate(xml), _premis_xsd().error_log)
+
+    def test_premis_document_validates_without_ffis(self):
+        data = _sample()
+        del data["provenance"]["ffis"]
+        xml = _premis(data)
+        self.assertTrue(_premis_xsd().validate(xml), _premis_xsd().error_log)
+
+    def test_the_premis_document_always_has_an_object_which_premis_xsd_requires(self):
+        xml = _premis(_sample())
+        for element in xml.findall(f"{{{PREMIS_NAMESPACE}}}object"):
+            xml.remove(element)
+        self.assertFalse(_premis_xsd().validate(xml))
+
+    def test_premis_document_holds_the_object_events_and_agents(self):
+        xml = _premis(_sample())
+        self.assertEqual(
+            [etree.QName(child).localname for child in xml],
+            ["object", "event", "event", "agent", "agent", "agent"],
+        )
+        self.assertTrue(_premis_xsd().validate(xml))
+
+    def test_control_characters_in_premis_text_keep_the_standalone_document_valid(self):
+        data = _sample()
+        data["provenance"]["events"][0]["eventOutcomeInformation"][0]["eventOutcomeDetail"][0][
+            "eventOutcomeDetailNote"
+        ] = "error: [unknown] boom\x00"
+        xml = _premis(data)
+        self.assertTrue(_premis_xsd().validate(xml), _premis_xsd().error_log)
+        note = xml.find(f".//{{{PREMIS_NAMESPACE}}}eventOutcomeDetailNote")
+        self.assertEqual(note.text, "error: [unknown] boom\ufffd")
+
+    def test_a_tool_error_note_pair_validates_in_json_and_in_the_premis_document(self):
+        data = self._with_error_notes("bad\x00byte")
+        _json_validator().validate(data)
+        xml = _premis(data)
+        self.assertTrue(_premis_xsd().validate(xml), _premis_xsd().error_log)
+        notes = [n.text for n in xml.findall(f".//{{{PREMIS_NAMESPACE}}}eventOutcomeDetailNote")]
+        self.assertIn("error: bad\ufffdbyte", notes)
+        self.assertEqual(notes[notes.index("error: bad\ufffdbyte") + 1], "error type: truncated_or_broken")
+        self.assertIsNone(xml.find(f".//{{{PREMIS_NAMESPACE}}}eventOutcomeDetailExtension/errors"))
+
+    def test_object_events_and_agents_are_required_in_json(self):
+        for key in ("object", "events", "agents"):
             data = _sample()
             del data["provenance"][key]
             self.assertFalse(_json_validator().is_valid(data), key)
 
-    def test_event_and_agents_are_required_in_xml(self):
-        xsd = _xsd()
-        for local in ("event", "agent"):
-            xml = etree.fromstring(MESXMLRenderer().render(_sample()))
-            prov = xml.find("m:provenance", NS)
-            for node in prov.findall(f"{{{PREMIS_NAMESPACE}}}{local}"):
-                prov.remove(node)
-            self.assertFalse(xsd.validate(xml), local)
+    def _with_error_notes(self, message="Unable to parse the file.", category="truncated_or_broken"):
+        data = _sample()
+        detail = data["provenance"]["events"][0]["eventOutcomeInformation"][0]["eventOutcomeDetail"]
+        detail.append({"eventOutcomeDetailNote": f"error: {message}"})
+        detail.append({"eventOutcomeDetailNote": f"error type: {category}"})
+        return data
+
+    def test_json_events_must_not_be_empty(self):
+        data = _sample()
+        data["provenance"]["events"] = []
+        self.assertFalse(_json_validator().is_valid(data))
+
+    def test_object_is_rendered_as_a_premis_file_in_the_standalone_document(self):
+        obj = _premis(_sample()).find(f"{{{PREMIS_NAMESPACE}}}object")
+        self.assertEqual(obj.get("{http://www.w3.org/2001/XMLSchema-instance}type"), "premis:file")
+        self.assertEqual(
+            [etree.QName(c).localname for c in obj],
+            ["objectIdentifier", "objectCharacteristics", "linkingEventIdentifier", "linkingEventIdentifier"],
+        )
+        self.assertIsNone(obj.find(f"{{{PREMIS_NAMESPACE}}}objectCategory"))
 
     def test_json_agents_must_not_be_empty(self):
         data = _sample()
@@ -229,48 +241,15 @@ class SchemaTests(SimpleTestCase):
 
     def test_unknown_event_outcome_is_rejected_in_json(self):
         data = _sample()
-        data["provenance"]["event"]["eventOutcomeInformation"][0]["eventOutcome"] = "partial"
+        data["provenance"]["events"][0]["eventOutcomeInformation"][0]["eventOutcome"] = "partial"
         self.assertFalse(_json_validator().is_valid(data))
 
-    def test_premis_elements_validate_against_premis_xsd(self):
-        premis = etree.XMLSchema(etree.parse(str(SCHEMA_DIR / "premis.xsd")))
-        xml = etree.fromstring(MESXMLRenderer().render(_sample()))
-        nodes = xml.findall(f"m:provenance/{{{PREMIS_NAMESPACE}}}*", NS)
-        self.assertEqual(len(nodes), 4)  # the event and three agents
-        for node in nodes:
-            self.assertTrue(premis.validate(node), premis.error_log)
-
-    def test_agent_version_follows_agent_type(self):
-        xml = etree.fromstring(MESXMLRenderer().render(_sample()))
-        agent = xml.find(f"m:provenance/{{{PREMIS_NAMESPACE}}}agent", NS)
+    def test_agent_version_follows_agent_type_in_the_standalone_document(self):
+        agent = _premis(_sample()).find(f"{{{PREMIS_NAMESPACE}}}agent")
         self.assertEqual(
             [etree.QName(c).localname for c in agent],
             ["agentIdentifier", "agentName", "agentType", "agentVersion"],
         )
-
-    def test_control_characters_in_premis_text_keep_the_document_valid(self):
-        data = _sample()
-        note = "error: [unknown] boom\x00"
-        data["provenance"]["event"]["eventOutcomeInformation"][0]["eventOutcomeDetail"][0][
-            "eventOutcomeDetailNote"
-        ] = note
-        xml = etree.fromstring(MESXMLRenderer().render(data))
-        xsd = _xsd()
-        self.assertTrue(xsd.validate(xml), xsd.error_log)
-        text = xml.find(f".//{{{PREMIS_NAMESPACE}}}eventOutcomeDetailNote", NS).text
-        self.assertEqual(text, "error: [unknown] boom\ufffd")
-
-    def test_null_fields_are_omitted(self):
-        xml = etree.fromstring(MESXMLRenderer().render(_sample()))
-        self.assertIsNone(xml.find("m:toolResolution/m:mimeType", NS))
-        second = xml.findall("m:results/m:result", NS)[1]
-        self.assertIsNone(second.find("m:version", NS))
-        self.assertIsNone(second.find("m:rawOutput", NS))
-
-    def test_error_payload_renders_without_failing(self):
-        out = MESXMLRenderer().render({"errors": ["no default tool"]})
-        xml = etree.fromstring(out)
-        self.assertEqual(etree.QName(xml).localname, "error")
 
 
 class EndpointSchemaTests(TestCase):
@@ -293,28 +272,19 @@ class EndpointSchemaTests(TestCase):
         self.assertEqual(response.status_code, 200)
         _json_validator().validate(response.json())
 
-    def test_xml_response_validates(self):
-        response = self._post(HTTP_ACCEPT="application/xml")
+    def test_premis_response_validates_against_premis_xsd(self):
+        response = self._post(HTTP_ACCEPT="application/premis+xml")
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response["Content-Type"].startswith("application/xml"))
-        xsd = _xsd()
+        self.assertTrue(response["Content-Type"].startswith("application/premis+xml"))
         xml = etree.fromstring(response.content)
-        self.assertTrue(xsd.validate(xml), xsd.error_log)
-        raw = xml.find("m:results/m:result/m:rawOutput", NS)
-        self.assertEqual(raw.text, '[{"a": 1}]')
+        self.assertTrue(_premis_xsd().validate(xml), _premis_xsd().error_log)
 
-    def test_xml_response_has_a_valid_premis_event(self):
-        response = self._post(HTTP_ACCEPT="application/xml")
+    def test_premis_response_has_a_valid_metadata_extraction_event(self):
+        response = self._post(HTTP_ACCEPT="application/premis+xml")
         xml = etree.fromstring(response.content)
-        premis = etree.XMLSchema(etree.parse(str(SCHEMA_DIR / "premis.xsd")))
-        nodes = xml.findall(f"m:provenance/{{{PREMIS_NAMESPACE}}}*", NS)
-        self.assertGreaterEqual(len(nodes), 2)  # the event and at least the service agent
-        for node in nodes:
-            self.assertTrue(premis.validate(node), premis.error_log)
-        self.assertEqual(
-            xml.find(f"m:provenance/{{{PREMIS_NAMESPACE}}}event/{{{PREMIS_NAMESPACE}}}eventType", NS).text,
-            "metadata extraction",
-        )
+        self.assertTrue(_premis_xsd().validate(xml), _premis_xsd().error_log)
+        event_type = xml.find(f"{{{PREMIS_NAMESPACE}}}event/{{{PREMIS_NAMESPACE}}}eventType")
+        self.assertEqual(event_type.text, "metadata extraction")
 
     def test_failed_tool_response_has_aligned_categories(self):
         upload = SimpleUploadedFile("photo.jpg", b"data", content_type="image/jpeg")

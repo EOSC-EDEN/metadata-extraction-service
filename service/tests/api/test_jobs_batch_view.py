@@ -5,6 +5,7 @@ from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from prometheus_client import REGISTRY
 
 from apps.api import jobs
 from tests.api import test_jobs_view
@@ -311,3 +312,38 @@ class BatchValidationTests(BatchJobsTestCase):
 
     def test_an_empty_file_is_an_invalid_request(self, run):
         self.assertRejected(self.submit_batch([_upload(), _upload(b"", "empty.jpg")]), 400)
+
+
+def _sample(name, labels=None):
+    return REGISTRY.get_sample_value(name, labels or {}) or 0.0
+
+
+@mock.patch("apps.extraction.adapters.base.subprocess.run", side_effect=_ok)
+class BatchMetricsTests(BatchJobsTestCase):
+    max_jobs = 3
+
+    def test_an_accepted_batch_is_counted_with_its_size(self, run):
+        accepted = _sample("mes_batch_requests_total", {"status": "accepted"})
+        files = _sample("mes_batch_files_sum")
+
+        self.assertEqual(self.submit_batch([_upload(name="a.jpg"), _upload(name="b.jpg")]).status_code, 202)
+
+        self.assertEqual(_sample("mes_batch_requests_total", {"status": "accepted"}) - accepted, 1)
+        self.assertEqual(_sample("mes_batch_files_sum") - files, 2)
+
+    def test_a_rejected_request_is_counted_as_rejected_and_not_as_accepted(self, run):
+        rejected = _sample("mes_batch_requests_total", {"status": "rejected"})
+        accepted = _sample("mes_batch_requests_total", {"status": "accepted"})
+
+        self.assertEqual(self.submit_batch([]).status_code, 400)
+
+        self.assertEqual(_sample("mes_batch_requests_total", {"status": "rejected"}) - rejected, 1)
+        self.assertEqual(_sample("mes_batch_requests_total", {"status": "accepted"}), accepted)
+
+    def test_a_batch_the_job_store_cannot_take_is_counted_as_rejected(self, run):
+        rejected = _sample("mes_batch_requests_total", {"status": "rejected"})
+
+        response = self.submit_batch([_upload(name=f"{n}.jpg") for n in range(4)])  # room for 3
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(_sample("mes_batch_requests_total", {"status": "rejected"}) - rejected, 1)

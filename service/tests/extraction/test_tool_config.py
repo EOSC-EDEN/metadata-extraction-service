@@ -25,6 +25,21 @@ class ToolConfigTests(SimpleTestCase):
         self.assertTrue(config.is_mandatory)
         self.assertTrue(config.enabled)
 
+    @override_settings(MES_TOOLS={"exiftool": {**_TOOL, "display_name": "ExifTool"}})
+    def test_display_name_is_read(self):
+        self.assertEqual(get_tool_config("exiftool").display_name, "ExifTool")
+
+    @override_settings(MES_TOOLS={"exiftool": _TOOL})
+    def test_display_name_is_optional(self):
+        validate_tool_config()
+        self.assertIsNone(get_tool_config("exiftool").display_name)
+
+    def test_blank_or_non_string_display_name_is_rejected(self):
+        for bad in ("", "  ", 5):
+            with override_settings(MES_TOOLS={"exiftool": {**_TOOL, "display_name": bad}}):
+                with self.assertRaises(ImproperlyConfigured, msg=repr(bad)):
+                    validate_tool_config()
+
     def test_default_tool_is_exiftool_by_default(self):
         self.assertEqual(get_default_tool().name, "exiftool")
 

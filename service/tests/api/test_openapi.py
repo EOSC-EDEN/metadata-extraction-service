@@ -39,7 +39,7 @@ class OpenAPITests(TestCase):
     def test_extract_operation_describes_request_and_responses(self):
         operation = self._schema()["paths"]["/api/v1/extract/"]["post"]
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type", "object_identifier", "object_identifier_type"})
+        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type", "format_name", "format_version", "media_type_name", "object_identifier", "object_identifier_type"})
         self.assertEqual(form["required"], ["file"])
         self.assertEqual(set(operation["responses"]), {"200", "400", "413", "500", "503"})
         ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
@@ -51,7 +51,7 @@ class OpenAPITests(TestCase):
         self.assertEqual(set(submit["responses"]), {"202", "400", "404", "413", "500", "503"})
         self.assertIn("Location", submit["responses"]["202"]["headers"])
         form = submit["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type", "object_identifier", "object_identifier_type"})
+        self.assertEqual(set(form["properties"]), {"file", "puid", "mime_type", "format_name", "format_version", "media_type_name", "object_identifier", "object_identifier_type"})
         status = paths["/api/v1/jobs/{job_id}/"]["get"]
         self.assertEqual(set(status["responses"]), {"200", "404"})
         result = paths["/api/v1/jobs/{job_id}/result/"]["get"]
@@ -59,10 +59,27 @@ class OpenAPITests(TestCase):
         ok = result["responses"]["200"]["content"]["application/json"]["schema"]
         self.assertIn("tool_resolution", ok["properties"])  # the mes-result schema, unchanged
 
+    def test_the_envelopes_are_json_only_and_the_results_still_have_xml(self):
+        paths = self._schema()["paths"]
+        for path, method, code in (
+            ("/api/v1/jobs/", "post", "202"),
+            ("/api/v1/jobs/{job_id}/", "get", "200"),
+            ("/api/v1/jobs/batch/", "post", "202"),
+            ("/api/v1/job-batches/{batch_id}/", "get", "200"),
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(set(paths[path][method]["responses"][code]["content"]), {"application/json"})
+        result = paths["/api/v1/jobs/{job_id}/result/"]["get"]["responses"]["200"]["content"]
+        self.assertEqual(set(result), {"application/json", "application/premis+xml"})
+
+    def test_the_removed_envelope_xsd_routes_are_gone(self):
+        for url in ("/api/v1/schema/job.xsd", "/api/v1/schema/job-batch.xsd"):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+
     def test_job_schema_urls_return_the_files(self):
         for url, filename in (
             ("/api/v1/schema/job.json", "mes-job.schema.json"),
-            ("/api/v1/schema/job.xsd", "mes-job.xsd"),
         ):
             with self.subTest(url=url):
                 response = self.client.get(url)
@@ -70,30 +87,6 @@ class OpenAPITests(TestCase):
                 self.assertEqual(
                     b"".join(response.streaming_content), (SCHEMA_DIR / filename).read_bytes()
                 )
-
-    def test_batch_extract_operation_describes_a_repeated_files_field(self):
-        operation = self._schema()["paths"]["/api/v1/extract/batch/"]["post"]
-        form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type", "file_metadata"})
-        self.assertEqual(form["required"], ["files"])
-        manifest = form["properties"]["file_metadata"]
-        self.assertEqual(manifest["type"], "object")
-        self.assertEqual(
-            set(manifest["additionalProperties"]["properties"]),
-            {"puid", "mime_type", "object_identifier", "object_identifier_type"},
-        )
-        encoding = operation["requestBody"]["content"]["multipart/form-data"]["encoding"]
-        self.assertEqual(encoding["file_metadata"]["contentType"], "application/json")
-        self.assertEqual(
-            form["properties"]["files"]["items"], {"type": "string", "format": "binary"}
-        )
-        self.assertEqual(form["properties"]["files"]["type"], "array")
-        self.assertEqual(set(operation["responses"]), {"200", "400", "413", "500"})
-        ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
-        entry = ok["properties"]["results"]["items"]
-        self.assertEqual(set(entry["properties"]), {"index", "filename", "result", "errors"})
-        self.assertIn("tool_resolution", entry["properties"]["result"]["properties"])  # mes-result, unchanged
-        self.assertIn("application/xml", operation["responses"]["200"]["content"])
 
     def test_the_single_file_extract_operation_is_unchanged_by_the_batch_route(self):
         operation = self._schema()["paths"]["/api/v1/extract/"]["post"]
@@ -107,7 +100,7 @@ class OpenAPITests(TestCase):
         self.assertEqual(set(submit["responses"]), {"202", "400", "404", "413", "500", "503"})
         self.assertIn("Location", submit["responses"]["202"]["headers"])
         form = submit["requestBody"]["content"]["multipart/form-data"]["schema"]
-        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type", "file_metadata"})
+        self.assertEqual(set(form["properties"]), {"files", "puid", "mime_type", "format_name", "format_version", "media_type_name", "file_metadata"})
         accepted = submit["responses"]["202"]["content"]["application/json"]["schema"]
         self.assertEqual(set(accepted["required"]), {"batch_id", "created_at", "status", "jobs"})
         status = paths["/api/v1/job-batches/{batch_id}/"]["get"]
@@ -118,10 +111,7 @@ class OpenAPITests(TestCase):
 
     def test_batch_schema_urls_return_the_files(self):
         for url, filename in (
-            ("/api/v1/schema/batch.json", "mes-batch.schema.json"),
-            ("/api/v1/schema/batch.xsd", "mes-batch.xsd"),
             ("/api/v1/schema/job-batch.json", "mes-job-batch.schema.json"),
-            ("/api/v1/schema/job-batch.xsd", "mes-job-batch.xsd"),
         ):
             with self.subTest(url=url):
                 response = self.client.get(url)
@@ -143,8 +133,5 @@ class OpenAPITests(TestCase):
             json.loads(b"".join(response.streaming_content)),
             json.loads((SCHEMA_DIR / "mes-result.schema.json").read_text()),
         )
-        response = self.client.get("/api/v1/schema/result.xsd")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            b"".join(response.streaming_content), (SCHEMA_DIR / "mes-result.xsd").read_bytes()
-        )
+        for removed in ("result.xsd", "batch.xsd", "premis-extensions.xsd"):
+            self.assertEqual(self.client.get(f"/api/v1/schema/{removed}").status_code, 404)

@@ -1,20 +1,29 @@
-"""Per-file `puid`, `mime_type` and object identifier on the batch routes (`file_metadata`)."""
+"""Per-file `puid`, `mime_type` and object identifier on the batch route (`file_metadata`)."""
 
+import hashlib
 import json
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from tests.api import test_extract_batch_view as sync_tests
 from tests.api import test_jobs_batch_view as async_tests
-from tests.api.test_extract_batch_view import _ok, _upload
+from tests.api.test_jobs_batch_view import _ok, _upload
 
 UUID = "3f1c9a52-7d0e-4b8a-9a52-0c1e2f3a4b5c"
 
 
 def _link(result):
-    (link,) = result["provenance"]["event"]["linkingObjectIdentifier"]
-    return link["linkingObjectIdentifierType"], link["linkingObjectIdentifierValue"]
+    (link,) = result["provenance"]["object"]["objectIdentifier"]
+    return link["objectIdentifierType"], link["objectIdentifierValue"]
+
+
+def _designations(result):
+    formats = result["provenance"]["object"]["objectCharacteristics"][0]["format"]
+    return [f.get("formatDesignation") for f in formats]
+
+
+def _characteristics(result):
+    return result["provenance"]["object"]["objectCharacteristics"][0]
 
 
 def _resolution(result):
@@ -23,7 +32,7 @@ def _resolution(result):
 
 
 class FileMetadataCases:
-    """Behaviour shared by the sync and the async route; subclasses say how to submit and read."""
+    """Behaviour of the batch route; a subclass says how to submit and read."""
 
     def submit(self, files, manifest=None, **fields):
         if manifest is not None:
@@ -76,7 +85,7 @@ class FileMetadataCases:
 
         a, b = self.results(response)
         self.assertEqual(_link(a), ("UUID", UUID))
-        self.assertEqual(_link(b), ("filename", "b.jpg"))
+        self.assertEqual(_link(b), ("filepath", "b.jpg"))
 
     def test_the_order_of_uploads_and_keys_does_not_matter(self, run):
         manifest = {"b.jpg": {"puid": "fmt/18"}, "a.jpg": {"puid": "fmt/43"}}
@@ -100,12 +109,47 @@ class FileMetadataCases:
                 response = self.submit([_upload()], manifest)
                 self.assertEqual(response.status_code, self.ok_status)
 
+    def test_format_names_follow_the_same_default_and_override_rules(self, run):
+        response = self.submit(
+            [_upload(name="a.jpg"), _upload(name="b.jpg"), _upload(name="c.jpg")],
+            {"b.jpg": {"format_name": "Own name", "media_type_name": "own"}, "c.jpg": None},
+            puid="fmt/43",
+            format_name="Shared name",
+            format_version="1.01",
+        )
+
+        a, b, c = self.results(response)
+        self.assertEqual(_designations(a), [{"formatName": "Shared name", "formatVersion": "1.01"}, None])
+        # the file's own name replaces the shared one; the shared version still serves it
+        self.assertEqual(
+            _designations(b), [{"formatName": "Own name", "formatVersion": "1.01"}, {"formatName": "own"}]
+        )
+        self.assertEqual(_designations(c), _designations(a))
+
+    def test_an_overlong_per_file_format_name_is_rejected(self, run):
+        for field, length in (("format_name", 256), ("format_version", 65), ("media_type_name", 256)):
+            response = self.submit([_upload(name="a.jpg")], {"a.jpg": {field: "x" * length}})
+            self.assertRejected(response, "a.jpg", field)
+        self.assertNothingStarted(run)
+
+    def test_each_object_has_the_size_and_sha256_of_its_own_file(self, run):
+        response = self.submit([_upload(b"one", "a.jpg"), _upload(b"x", "b.jpg"), _upload(b"twelve bytes", "c.jpg")])
+
+        for result, content in zip(self.results(response), (b"one", b"x", b"twelve bytes")):
+            characteristics = _characteristics(result)
+            self.assertEqual(characteristics["size"], len(content))
+            (fixity,) = characteristics["fixity"]
+            self.assertEqual(fixity["messageDigestAlgorithm"], "SHA-256")
+            self.assertEqual(fixity["messageDigest"], hashlib.sha256(content).hexdigest())
+            self.assertEqual(fixity["messageDigestOriginator"], "Metadata Extraction Service")
+            self.assertEqual(list(characteristics), ["fixity", "size", "format"])
+
     def test_no_manifest_behaves_as_before(self, run):
         response = self.submit([_upload(name="a.jpg")], puid="fmt/43")
 
         (a,) = self.results(response)
         self.assertEqual(_resolution(a), ("fmt/43", "image/jpeg"))
-        self.assertEqual(_link(a), ("filename", "a.jpg"))
+        self.assertEqual(_link(a), ("filepath", "a.jpg"))
 
     def test_duplicate_filenames_without_an_entry_are_still_accepted(self, run):
         response = self.submit([_upload(b"one", "same.jpg"), _upload(b"two", "same.jpg")])
@@ -183,22 +227,6 @@ class FileMetadataCases:
             self.submit([_upload(name="a.jpg")], {"a.jpg": {"puid": "fmt/43"}}, object_identifier="abc"),
             "object_identifier",
         )
-
-
-@mock.patch("apps.extraction.adapters.base.subprocess.run", side_effect=_ok)
-class SyncFileMetadataTests(FileMetadataCases, sync_tests.BatchViewTestCase):
-    ok_status = 200
-
-    def _submit(self, files, **fields):
-        return self.post(files, **fields)
-
-    def results(self, response):
-        self.assertEqual(response.status_code, 200)
-        return [entry["result"] for entry in response.json()["results"]]
-
-    def assertNothingStarted(self, run):
-        run.assert_not_called()
-        self.assertWorkDirRemoved()
 
 
 @mock.patch("apps.extraction.adapters.base.subprocess.run", side_effect=async_tests._ok)

@@ -26,6 +26,8 @@ class ToolConfig:
     timeout_seconds: int = 30
     enabled: bool = True
     mandatory: bool = False
+    #: Human-readable name for provenance (PREMIS `agentName`); None means "use the tool name".
+    display_name: str | None = None
 
     @property
     def is_mandatory(self) -> bool:
@@ -43,6 +45,7 @@ def _build(name: str, entry: dict) -> ToolConfig:
             timeout_seconds=entry.get("timeout_seconds", 30),
             enabled=entry.get("enabled", True),
             mandatory=entry.get("mandatory", False),
+            display_name=entry.get("display_name"),
         )
     except KeyError as exc:
         raise ImproperlyConfigured(
@@ -55,6 +58,12 @@ def _build(name: str, entry: dict) -> ToolConfig:
     if config.kind == "http" and not config.invocation_command:
         raise ImproperlyConfigured(
             f"settings.MES_TOOLS['{name}'] is an http tool and requires 'invocation_command' (the base URL)."
+        )
+    if config.display_name is not None and not (
+        isinstance(config.display_name, str) and config.display_name.strip()
+    ):
+        raise ImproperlyConfigured(
+            f"settings.MES_TOOLS['{name}']['display_name'] must be a non-empty string, got {config.display_name!r}."
         )
     return config
 

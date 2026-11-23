@@ -99,19 +99,6 @@ def record_batch(status: str, file_count: int = 0) -> None:
         BATCH_FILES.observe(file_count)
 
 
-def classify_batch(entries) -> str:
-    """success: every file extracted fully; failed: none did; partial: anything in between."""
-    outcomes = [
-        classify_serialized_outcome(entry["result"]) if "result" in entry else "error"
-        for entry in entries
-    ]
-    if all(o == "success" for o in outcomes):
-        return "success"
-    if all(o in ("failed", "error") for o in outcomes):
-        return "failed"
-    return "partial"
-
-
 def record_upload(size_bytes: int) -> None:
     UPLOADED_FILE_BYTES.observe(size_bytes)
     UPLOADED_BYTES.inc(size_bytes)

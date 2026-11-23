@@ -4,7 +4,7 @@ from .base import ErrorCategory, SubprocessToolAdapter
 class ExifToolAdapter(SubprocessToolAdapter):
     tool_name = "exiftool"
     invocation_command = "exiftool"
-    raw_output_format = "json"
+    raw_output_format = "xml"  # RDF/XML from -X
     error_patterns = {
         ErrorCategory.ENCRYPTED: ("encrypt", "password"),
         ErrorCategory.WRONG_FORMAT: ("unknown file type", "file format error", "unsupported file type"),
@@ -12,4 +12,4 @@ class ExifToolAdapter(SubprocessToolAdapter):
     }
 
     def build_command(self, file_path) -> list[str]:
-        return [self.invocation_command, "-json", *self.extra_args, str(file_path)]
+        return [self.invocation_command, "-X", *self.extra_args, str(file_path)]

@@ -46,6 +46,7 @@ from apps.api.job_store import (  # noqa: F401  (re-exported: the job types live
     RedisJobStore,
     build_job_store,
 )
+from apps.api import premis
 from apps.api.serializers import serialize_extraction_result
 from apps.extraction.exceptions import ToolNotConfigured
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
@@ -59,7 +60,8 @@ _UNEXPECTED_ERROR = "An unexpected error occurred while processing the job."
 
 
 def _extract_and_serialize(
-    *, file_path, filename, puid, mime_type, object_identifier, object_identifier_type, request_id
+    *, file_path, filename, puid, mime_type, object_identifier, object_identifier_type, request_id,
+    format_names=None,
 ) -> dict:
     result = ExtractionOrchestrator().extract(
         file_path, puid=puid, mime_type=mime_type, request_id=request_id, filename=filename
@@ -71,6 +73,8 @@ def _extract_and_serialize(
         filename,
         object_identifier=object_identifier,
         object_identifier_type=object_identifier_type,
+        format_names=format_names,
+        file_fixity=premis.file_fixity(file_path),
     )
 
 
@@ -113,6 +117,7 @@ class JobService:
         size_bytes,
         object_identifier=None,
         object_identifier_type=None,
+        format_names=None,
     ) -> JobRecord:
         """Queue a job. The caller owns `work_dir` until this returns; afterwards the job does
         (it is removed when the job finishes). Raises `JobStoreFull` when at capacity."""
@@ -138,6 +143,7 @@ class JobService:
                 request_id,
                 object_identifier,
                 object_identifier_type,
+                format_names,
             )
         except Exception:
             self._finish(record.job_id, JobStatus.FAILED, errors=[_UNEXPECTED_ERROR])
@@ -150,7 +156,7 @@ class JobService:
         """Queue one job per item (`file_path`, `work_dir`, `filename`, `size_bytes`), all or none.
 
         An item may also carry its own `puid`, `mime_type`, `object_identifier` and
-        `object_identifier_type`; a `puid` or `mime_type` key (even `None`) replaces the shared
+        `object_identifier_type` (and `format_names`); a `puid` or `mime_type` key (even `None`) replaces the shared
         argument of the same name, which only serves items that have none.
 
         Raises `JobStoreFull`, with no job created, unless the store has room for every item; the
@@ -198,6 +204,7 @@ class JobService:
                     record.request_id,
                     item.get("object_identifier"),
                     item.get("object_identifier_type"),
+                    item.get("format_names"),
                 )
             except Exception:
                 logger.exception("batch %s: could not queue job %s", batch.batch_id, record.job_id)
@@ -276,6 +283,7 @@ class JobService:
         request_id,
         object_identifier=None,
         object_identifier_type=None,
+        format_names=None,
     ):
         extra = {"request_id": request_id}
         record = self._store.get(job_id)
@@ -296,6 +304,7 @@ class JobService:
                 mime_type=mime_type,
                 object_identifier=object_identifier,
                 object_identifier_type=object_identifier_type,
+                format_names=format_names,
                 request_id=request_id,
             )
         except ToolNotConfigured as exc:

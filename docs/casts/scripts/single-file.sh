@@ -79,7 +79,7 @@ echo; echo "# 5. The raw metaflac output is returned unmodified"
 type_cmd "curl -s -F file=@sample.flac $MES_URL/api/v1/extract/ | python3 -I metaflac.py"
 
 echo; echo "# 6. Ask for XML instead"
-type_cmd "curl -s -H 'Accept: application/xml' -F file=@sample.flac $MES_URL/api/v1/extract/ | head -c 300; echo ..."
+type_cmd "curl -s -H 'Accept: application/premis+xml' -F file=@sample.flac $MES_URL/api/v1/extract/ | head -c 300; echo ..."
 
 echo; echo "# 7. Asynchronous: submit a job, poll it, fetch the result"
 JOB_ID="$(curl -s -F file=@sample.flac "$MES_URL/api/v1/jobs/" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["job_id"])')"

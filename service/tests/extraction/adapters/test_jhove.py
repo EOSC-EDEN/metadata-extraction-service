@@ -13,7 +13,7 @@ from apps.extraction.adapters.base import ErrorCategory, ToolExecutionStatus
 from apps.extraction.adapters.jhove import JhoveAdapter
 
 RUN = "apps.extraction.adapters.base.subprocess.run"
-COMMAND = ["jhove", "-h", "xml", "/tmp/f"]
+COMMAND = ["jhove", "-k", "-h", "xml", "/tmp/f"]
 
 REPORT_INVALID = (
     '<?xml version="1.0"?><jhove xmlns="http://schema.openpreservation.org/ois/xml/ns/jhove">'
@@ -30,14 +30,14 @@ class JhoveAdapterTests(SimpleTestCase):
         self.assertEqual(adapter.invocation_command, "jhove")
         self.assertEqual(adapter.raw_output_format, "xml")
 
-    def test_build_command_uses_xml_handler_without_checksums(self):
+    def test_build_command_uses_xml_handler_with_k_flag(self):
         command = JhoveAdapter().build_command("/tmp/f")
         self.assertEqual(command, COMMAND)
-        self.assertNotIn("-k", command)
+        self.assertIn("-k", command)
 
     def test_extra_args_precede_the_file_path(self):
         command = JhoveAdapter(extra_args=["-m", "PDF-hul"]).build_command("/tmp/f")
-        self.assertEqual(command, ["jhove", "-h", "xml", "-m", "PDF-hul", "/tmp/f"])
+        self.assertEqual(command, ["jhove", "-k", "-h", "xml", "-m", "PDF-hul", "/tmp/f"])
 
     @mock.patch(RUN)
     def test_success_returns_unmodified_output(self, mock_run):

@@ -4,7 +4,7 @@ from .base import ErrorCategory, SubprocessToolAdapter
 class FFprobeAdapter(SubprocessToolAdapter):
     tool_name = "ffprobe"
     invocation_command = "ffprobe"
-    raw_output_format = "json"
+    raw_output_format = "xml"
     error_patterns = {
         ErrorCategory.ENCRYPTED: ("encrypt", "decryption", "drm"),
         ErrorCategory.TRUNCATED_OR_BROKEN: ("moov atom not found", "truncated", "partial file", "unexpected end", "corrupt"),
@@ -17,7 +17,7 @@ class FFprobeAdapter(SubprocessToolAdapter):
             "-v",
             "error",
             "-print_format",
-            "json",
+            "xml",
             "-show_format",
             "-show_streams",
             *self.extra_args,

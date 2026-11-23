@@ -42,13 +42,13 @@ from .base import SubprocessToolAdapter
 class FFprobeAdapter(SubprocessToolAdapter):
     tool_name = "ffprobe"
     invocation_command = "ffprobe"
-    raw_output_format = "json"
+    raw_output_format = "xml"
 
     def build_command(self, file_path) -> list[str]:
         return [
             self.invocation_command,
             "-v", "error",
-            "-print_format", "json",
+            "-print_format", "xml",
             "-show_format", "-show_streams",
             *self.extra_args,
             str(file_path),
@@ -61,9 +61,9 @@ What each part does:
 |---|---|
 | `tool_name` | Name reported in results. **Must equal the key you use in `MES_TOOLS`** (see [Gotchas](#gotchas)). |
 | `invocation_command` | Default binary. Used unless `MES_TOOLS` sets `invocation_command`, which overrides it. |
-| `raw_output_format` | Label for the output: `"json"`, `"xml"` or `"text"`. Describes what the tool prints; MES does not convert it. |
+| `raw_output_format` | Label for the output: `"json"`, `"xml"` or `"text"`. Describes what the tool prints; MES does not convert it. With `"xml"`, a well-formed output is also embedded as elements in the PREMIS event of the XML response (see [the result container](reference/result-container.md)). |
 | `build_command(file_path)` | Returns the full argv as a list (no shell). Put `*self.extra_args` before the file path so settings-supplied flags are applied. |
-| `get_tool_version()` *(optional)* | Return the tool's version string, reported in the result's tool metadata. Defaults to `None`. |
+| `get_tool_version()` *(optional)* | Return the tool's version string, reported in the result's tool metadata and as the PREMIS `agentVersion` of the tool. Defaults to `None`; no built-in adapter implements it yet, so tool agents currently have no version. |
 
 Behaviour inherited from `SubprocessToolAdapter`, which you normally do not override:
 
@@ -90,7 +90,7 @@ class TikaAdapter(HTTPToolAdapter):
             body = handle.read()
         return {
             "method": "PUT",
-            "url": f"{self.base_url}/rmeta/text",
+            "url": f"{self.base_url}/rmeta",
             "headers": {"Accept": "application/json"},
             "data": body,
         }
@@ -118,6 +118,8 @@ MES_TOOLS = {
         "timeout_seconds": 30,
         "enabled": True,
         "mandatory": False,
+        # Optional: name shown as the PREMIS agent name; omit to use the key ("ffprobe").
+        "display_name": "ffprobe",
     },
 }
 ```
@@ -132,13 +134,14 @@ MES_TOOLS = {
 | `extra_args` | no | `[]` | Additional arguments inserted by the adapter's `build_command()` (subprocess tools only). |
 | `timeout_seconds` | no | `30` | Per-invocation timeout. Increase for slow tools or large files. |
 | `enabled` | no | `True` | Disabled tools stay listed by `GET /api/v1/tools/` but are never selected. |
+| `display_name` | no | the `MES_TOOLS` key | Human-readable name used as the PREMIS `agentName` in `provenance.agents`. Must be a non-empty string when set. |
 | `mandatory` | no | `False` | If `True`, a failure or timeout of this tool is reported as a top-level error (MES-REQ-3-006). If `False`, it is reported as a warning and the other tools' results are still returned. |
 
 The dictionary key (`"ffprobe"` above) is the tool's name everywhere: in the `tools` listing, in result output, and when selecting the default tool.
 
 ### Making it the default tool
 
-At present, every request runs the **default tool** (MES-REQ-1-001). Mapping file formats to several tools through the File Format Library is a later build step. To make the new tool the default, set the `MES_DEFAULT_TOOL` environment variable to its key:
+Which tools run is decided by [local format rules](how-to/local-format-rules.md): the tools named by the matching rules run, and the **default tool** (MES-REQ-1-001) is the fallback that runs alone when no rule matches. Mapping file formats to tools through the File Format Library is not implemented. To select your tool for a format, add it to a rule. To make it the fallback default instead, set the `MES_DEFAULT_TOOL` environment variable to its key:
 
 ```bash
 MES_DEFAULT_TOOL=ffprobe
@@ -219,7 +222,7 @@ python manage.py test
    ```
 
    The response shows name, kind, enabled, mandatory, default and timeout. Invocation details are deliberately not exposed.
-3. If the tool is the default, run an extraction:
+3. If the tool is the default (or selected by a local rule for your file), run an extraction:
 
    ```bash
    curl -F file=@sample.mp4 http://localhost:8000/api/v1/extract/

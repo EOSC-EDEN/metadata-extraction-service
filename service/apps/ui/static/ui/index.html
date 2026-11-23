@@ -363,7 +363,7 @@
       <div id="batch-review-rows"></div>
       <label class="async-option" style="display:none">
         <input type="checkbox" id="async-checkbox" />
-        Process asynchronously (submit a job and wait for it to finish)
+        Process asynchronously (submit a job and wait for it to finish; several files are always processed this way)
       </label>
       <div class="review-actions">
         <button type="button" class="try-again-btn" id="batch-review-start">Extract</button>
@@ -448,6 +448,7 @@
   const tryAgain   = document.getElementById('try-again');
   const batchReview     = document.getElementById('batch-review');
   const batchReviewRows = document.getElementById('batch-review-rows');
+  let asyncEnabled = false;   // set from /api/v1/limits/; a batch needs it, otherwise files go one by one
   let pendingFiles = null;   // the files of a batch waiting in the review step
   const asyncCheckbox = document.getElementById('async-checkbox');
   const spinnerText   = document.getElementById('spinner-text');
@@ -494,7 +495,8 @@
       }).join('');
 
       // Offer async processing only when the service has it enabled.
-      document.querySelector('label.async-option').style.display = limits.async_enabled === true ? '' : 'none';
+      asyncEnabled = limits.async_enabled === true;
+      document.querySelector('label.async-option').style.display = asyncEnabled ? '' : 'none';
 
       infoReady = true;
       infoPanel.style.display = '';
@@ -748,10 +750,25 @@
     }
   }
 
-  async function runSyncBatch(files, form) {
-    const data = await fetchJson('/api/v1/extract/batch/', { method: 'POST', body: form });
-    const groups = prepareGroups(files, '');
-    (data.results || []).forEach(entry => fillGroup(groups[entry.index], files[entry.index], entry));
+  // Without asynchronous processing there is no batch route: send the files one after another to the
+  // single-file route and fill each file's group as its result arrives.
+  async function runSequentialBatch(files, metadata) {
+    const groups = prepareGroups(files, 'Waiting…');
+    for (let i = 0; i < files.length; i++) {
+      groups[i].status.textContent = 'Extracting…';
+      spinnerText.textContent = `Extracting… ${i} of ${files.length} done`;
+      const form = new FormData();
+      form.append('file', files[i]);
+      const entry = metadata[files[i].name] || {};
+      ['puid', 'mime_type', 'object_identifier', 'object_identifier_type'].forEach(field => {
+        if (entry[field]) form.append(field, entry[field]);
+      });
+      try {
+        fillGroup(groups[i], files[i], { result: await fetchJson('/api/v1/extract/', { method: 'POST', body: form }) });
+      } catch (err) {
+        showGroupError(groups[i], err.message || 'This file could not be processed.');
+      }
+    }
   }
 
   // Submit one job per file, poll the batch with a growing interval, and fill each file's group from
@@ -810,8 +827,9 @@
     if (Object.keys(metadata).length) form.append('file_metadata', JSON.stringify(metadata));
 
     try {
-      if (asyncCheckbox.checked) await runAsyncBatch(files, form);
-      else await runSyncBatch(files, form);
+      // A batch is always asynchronous when the service allows it, whatever the checkbox says.
+      if (asyncEnabled) await runAsyncBatch(files, form);
+      else await runSequentialBatch(files, metadata);
     } catch (err) {
       showError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -980,10 +998,11 @@
     if (root === document) resultDiv.style.display = 'block';
   }
 
-  // The PREMIS extraction event and its agents (provenance.event / provenance.agents), all escaped.
+  // The PREMIS extraction event and its agents (provenance.events / provenance.object / provenance.agents); shows the summary event, the last one, all escaped.
   function renderEvent(prov, root = document) {
     const box = part(root, 'event-section');
-    const ev = prov.event;
+    const events = prov.events || [];
+    const ev = events[events.length - 1];
     if (!ev) { box.style.display = 'none'; return; }
     const outcome = (ev.eventOutcomeInformation || [])[0] || {};
     const notes = (outcome.eventOutcomeDetail || []).map(n => n.eventOutcomeDetailNote);
@@ -991,12 +1010,12 @@
       const id = (a.agentIdentifier || [])[0] || {};
       return `${(a.agentName || [id.agentIdentifierValue]).join(', ')}${a.agentVersion ? ' ' + a.agentVersion : ''}`;
     });
-    const object = (ev.linkingObjectIdentifier || [])[0] || {};
+    const object = ((prov.object || {}).objectIdentifier || [])[0] || {};
     part(root, 'event-body').innerHTML =
       `<div><b>Type</b> ${esc(ev.eventType)}</div>` +
       `<div><b>Date and time</b> ${esc(ev.eventDateTime)}</div>` +
       `<div><b>Outcome</b> ${esc(outcome.eventOutcome)}</div>` +
-      `<div><b>Object</b> ${esc(object.linkingObjectIdentifierType)}: ${esc(object.linkingObjectIdentifierValue)}</div>` +
+      `<div><b>Object</b> ${esc(object.objectIdentifierType)}: ${esc(object.objectIdentifierValue)}</div>` +
       (notes.length ? `<div><b>Notes</b>${notes.map(n => `<div>${esc(n)}</div>`).join('')}</div>` : '') +
       (agents.length ? `<div><b>Agents</b>${agents.map(a => `<div>${esc(a)}</div>`).join('')}</div>` : '');
     box.style.display = 'block';

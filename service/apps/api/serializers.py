@@ -64,6 +64,19 @@ def check_declared_length(content_length) -> None:
         )
 
 
+#: Optional names for the file's format, given by the caller: the PRONOM format's name and version,
+#: and the name of its IANA media type. They describe the formats in the PREMIS object.
+FORMAT_NAME_FIELDS = ("format_name", "format_version", "media_type_name")
+
+
+def format_names(data, shared=None) -> dict | None:
+    """The format names present in `data` (else in `shared`); None when the caller gave none."""
+    shared = shared or {}
+    names = {field: data.get(field) or shared.get(field) for field in FORMAT_NAME_FIELDS}
+    names = {field: value for field, value in names.items() if value}
+    return names or None
+
+
 class FileDescriptionSerializer(serializers.Serializer):
     """What a caller may say about one file: its format and the PREMIS object it is.
 
@@ -73,6 +86,9 @@ class FileDescriptionSerializer(serializers.Serializer):
 
     puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
     mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    format_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    format_version = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    media_type_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
     object_identifier = serializers.CharField(required=False, allow_blank=True, max_length=255)
     object_identifier_type = serializers.CharField(required=False, allow_blank=True, max_length=64)
 
@@ -103,7 +119,7 @@ class ExtractionRequestSerializer(FileDescriptionSerializer):
 class BatchExtractionRequestSerializer(serializers.Serializer):
     """Several files in one request: the `files` field repeated once per file.
 
-    `puid` and `mime_type` apply to every file that has no value of its own. `file_metadata` is an
+    `puid`, `mime_type`, `format_name`, `format_version` and `media_type_name` apply to every file that has no value of its own. `file_metadata` is an
     optional JSON object keyed by uploaded filename; each value holds `puid`, `mime_type`,
     `object_identifier` and `object_identifier_type` for that file, with the rules of the
     single-file route. A key must name exactly one uploaded file. There is no request-level object
@@ -118,6 +134,9 @@ class BatchExtractionRequestSerializer(serializers.Serializer):
     files = serializers.ListField(child=serializers.FileField(allow_empty_file=True))
     puid = serializers.CharField(required=False, allow_blank=True, max_length=64)
     mime_type = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    format_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    format_version = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    media_type_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
     file_metadata = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
@@ -133,6 +152,7 @@ class BatchExtractionRequestSerializer(serializers.Serializer):
             {
                 "puid": entries.get(upload.name, {}).get("puid") or attrs.get("puid") or None,
                 "mime_type": entries.get(upload.name, {}).get("mime_type") or attrs.get("mime_type") or None,
+                "format_names": format_names(entries.get(upload.name, {}), attrs),
                 "object_identifier": entries.get(upload.name, {}).get("object_identifier") or None,
                 "object_identifier_type": entries.get(upload.name, {}).get("object_identifier_type") or None,
             }
@@ -273,8 +293,23 @@ def serialize_extraction_result(
     filename: str,
     object_identifier: str | None = None,
     object_identifier_type: str | None = None,
+    format_names: dict | None = None,
+    file_fixity: dict | None = None,
 ) -> dict:
-    timestamp = datetime.now(timezone.utc).isoformat()  # computed once: provenance and event share it
+    timestamp = datetime.now(timezone.utc).isoformat()
+    agent_ids = premis.new_agent_ids(result)  # the event links and the agents use the same UUIDs
+    events = premis.build_events(
+        result, timestamp=timestamp, agent_ids=agent_ids, request_id=request_id, filename=filename
+    )
+    premis_object = premis.build_object(
+        result,
+        filename=filename,
+        events=events,
+        object_identifier=object_identifier,
+        object_identifier_type=object_identifier_type,
+        format_names=format_names,
+        file_fixity=file_fixity,
+    )
     return {
         "request_id": request_id,
         "filename": filename,
@@ -291,15 +326,9 @@ def serialize_extraction_result(
             "timestamp": timestamp,
             "service_version": SERVICE_VERSION,
             "tool_versions": {r.tool_name: r.tool_version for r in result.results},
-            "event": premis.build_event(
-                result,
-                request_id=request_id,
-                timestamp=timestamp,
-                filename=filename,
-                object_identifier=object_identifier,
-                object_identifier_type=object_identifier_type,
-            ),
-            "agents": premis.build_agents(result, service_version=SERVICE_VERSION),
+            "object": premis_object,
+            "events": events,
+            "agents": premis.build_agents(result, service_version=SERVICE_VERSION, agent_ids=agent_ids),
             "matched_rules": list(result.matched_rules),
             "ffis": result.ffis_provenance,
         },

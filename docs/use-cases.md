@@ -120,7 +120,7 @@ flowchart LR
 - **Goal:** get machine-readable output for one file.
 - **Main flow:**
   1. The researcher sends the file to the service in a single request.
-  2. The researcher chooses whether the answer comes back as JSON (the default) or XML.
+  2. The researcher chooses whether the answer comes back as JSON (the default) or as a PREMIS XML document.
   3. The answer contains one entry per tool, with the tool, its version, whether it succeeded, and its raw output.
 - **Outcome:** a result that follows the published schema (see C2).
 - **Requirements:** MES-REQ-2-001, MES-REQ-2-002, MES-REQ-2-005, MES-REQ-3-004, MES-REQ-3-007.
@@ -191,7 +191,7 @@ flowchart LR
 - **Main flow:**
   1. The ingest workflow sends each file to the service, together with its format when format identification has already run.
   2. The workflow stores the raw output of each tool together with the tool, its version, the start and end time, and the output format.
-  3. The workflow also stores the provenance information of the result (when it was made, which service version, which tool versions, and which identification service was consulted) and the request's reference number.
+  3. The workflow also stores the provenance information of the result (when it was made, which service version, how the tools were selected and which identification service was consulted; the PREMIS events and agents hold the same) and the request's reference number.
 - **Outcome:** the stored metadata names the tool and version behind each element. Because the output is not modified, it can be re-interpreted later. This also supports significant properties recorded as technical metadata (QUALITY-TECHNICAL-REQ-016).
 - **Requirements:** MES-REQ-3-001, MES-REQ-3-002, MES-REQ-3-004, MES-REQ-3-007, MES-REQ-3-008.
 
@@ -199,7 +199,7 @@ flowchart LR
 
 - **Goal:** build or maintain an integration without guessing the structure of the result.
 - **Main flow:**
-  1. The curator or integrator downloads the service's published description: the API description, a schema for JSON results and a schema for XML results. An interactive page for trying out the API is also available.
+  1. The curator or integrator downloads the service's published description: the API description, a schema for JSON results, and for XML results the PREMIS 3 schema of the Library of Congress. An interactive page for trying out the API is also available.
   2. The integration checks each result against the schema before storing it.
 - **Outcome:** the top-level structure is stable and can be checked by machine, while the content of each tool's output stays specific to that tool.
 - **Requirements:** MES-REQ-2-001, MES-REQ-2-005.
@@ -357,12 +357,13 @@ F4 is drawn outside the system boundary because the curator does it in the Forma
 
 ## Not yet supported
 
-- Extraction from a whole SIP or AIP (MES-REQ-2-003, MES-REQ-1-003). The service accepts one file per request.
+- Extraction from a whole SIP or AIP (MES-REQ-2-003, MES-REQ-1-003). The service accepts single files, or several files as an asynchronous batch, not a package.
 - Tool selection from a Format Library (MES-REQ-1-002, MES-REQ-3-009), described in F1–F4. Format identification through FFIS is implemented, and operators can link PUIDs and file extensions to tools with local format rules. As a result the output does not state which Format Library selected the tools.
 - Tool selection by MIME type (MES-REQ-1-004, MES-REQ-2-007). The API accepts `mime_type` and `puid`, but local format rules match only on PUID and file extension. Without a matching rule, only the default tool runs whatever identifier was supplied.
 - Authentication (MES-REQ-1-006). The API is open; restrict access outside the service (for example in a gateway).
-- A complete PREMIS object characteristic (MES-REQ-2-009). The service returns the PREMIS event and agents only.
-- Labelling extracted metadata with its metadata type and standard (MES-REQ-3-005). Each result carries only its tool and raw output format (`json` or `text`).
+- A complete PREMIS object characteristic (MES-REQ-2-009). The service returns the PREMIS object (identifier, fixity, size and formats), the events and the agents, but does not put the tool output in `objectCharacteristicsExtension`: it stays in the tool events.
+- JSON-LD output (MES-REQ-2-011). The XML is a PREMIS 3 document valid against `premis.xsd`; the JSON mirrors it.
+- Labelling extracted metadata with its metadata type and standard (MES-REQ-3-005). Each result carries only its tool and raw output format (`json`, `xml` or `text`).
 - The Archivematica characterisation-command mode (MES-REQ-6-001 to MES-REQ-6-012). The service has no command-line mode that writes XML to standard output and signals failure through its exit status.
 
 Available but not on by default: ExifTool and MediaInfo are enabled by default. FFprobe, ImageMagick, File Scraper (MES-REQ-4-004) and Tika are implemented but must be switched on by the operator.

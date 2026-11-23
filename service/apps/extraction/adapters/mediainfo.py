@@ -4,7 +4,7 @@ from .base import ErrorCategory, SubprocessToolAdapter
 class MediaInfoAdapter(SubprocessToolAdapter):
     tool_name = "mediainfo"
     invocation_command = "mediainfo"
-    raw_output_format = "json"
+    raw_output_format = "xml"
     error_patterns = {
         ErrorCategory.ENCRYPTED: ("encrypt", "password"),
         ErrorCategory.WRONG_FORMAT: ("not supported", "unsupported", "unknown format"),
@@ -12,4 +12,4 @@ class MediaInfoAdapter(SubprocessToolAdapter):
     }
 
     def build_command(self, file_path) -> list[str]:
-        return [self.invocation_command, "--Output=JSON", *self.extra_args, str(file_path)]
+        return [self.invocation_command, "--Output=XML", *self.extra_args, str(file_path)]

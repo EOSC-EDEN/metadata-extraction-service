@@ -20,7 +20,7 @@ scrape_configs:
 | `mes_extract_request_duration_seconds` | Histogram | |
 | `mes_jobs_waiting` | Gauge | |
 | `mes_jobs_waiting_bytes` | Gauge | |
-| `mes_batch_requests_total` | Counter | `status`: `success`, `partial`, `failed`, `rejected`, `accepted` |
+| `mes_batch_requests_total` | Counter | `status`: `accepted` (jobs created) or `rejected` (the request was invalid or the job store was full) |
 | `mes_batch_files` | Histogram | |
 | `mes_uploaded_file_bytes` | Histogram | |
 | `mes_uploaded_bytes_total` | Counter | |

@@ -13,14 +13,14 @@ class MediaInfoAdapterTests(SimpleTestCase):
 
     def test_build_command(self):
         command = self._adapter().build_command("/tmp/file.mp4")
-        self.assertEqual(command, ["mediainfo", "--Output=JSON", "/tmp/file.mp4"])
+        self.assertEqual(command, ["mediainfo", "--Output=XML", "/tmp/file.mp4"])
 
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
-    def test_success_returns_raw_json_output(self, mock_run):
+    def test_success_returns_raw_xml_output(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
-            args=["mediainfo", "--Output=JSON", "/tmp/file.mp4"],
+            args=["mediainfo", "--Output=XML", "/tmp/file.mp4"],
             returncode=0,
-            stdout='{"media":{}}',
+            stdout='<MediaInfo><media/></MediaInfo>',
             stderr="",
         )
 
@@ -28,9 +28,9 @@ class MediaInfoAdapterTests(SimpleTestCase):
 
         self.assertEqual(result.tool_name, "mediainfo")
         self.assertEqual(result.status, ToolExecutionStatus.SUCCESS)
-        self.assertEqual(result.raw_output, '{"media":{}}')
-        self.assertEqual(result.raw_output_format, "json")
-        self.assertEqual(result.command, ("mediainfo", "--Output=JSON", "/tmp/file.mp4"))
+        self.assertEqual(result.raw_output, '<MediaInfo><media/></MediaInfo>')
+        self.assertEqual(result.raw_output_format, "xml")
+        self.assertEqual(result.command, ("mediainfo", "--Output=XML", "/tmp/file.mp4"))
 
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
     def test_non_zero_exit_maps_to_failure(self, mock_run):

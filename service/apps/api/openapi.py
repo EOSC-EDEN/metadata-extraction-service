@@ -47,11 +47,17 @@ def load_result_schema() -> dict:
     return _to_openapi(json.loads((SCHEMA_DIR / "mes-result.schema.json").read_text()))
 
 
-def _json_and_xml(schema):
+def _json_and_premis(schema):
+    """JSON and the PREMIS document (`application/premis+xml`); `application/xml` is not offered (406)."""
     return {
         "application/json": {"schema": deepcopy(schema)},
-        "application/xml": {"schema": {"type": "string", "format": "xml"}},
+        "application/premis+xml": {"schema": {"type": "string", "format": "xml"}},
     }
+
+
+def _json_only(schema):
+    """An envelope (job, batch of jobs): JSON only, `Accept: application/xml` is answered with 406."""
+    return {"application/json": {"schema": deepcopy(schema)}}
 
 
 class ExtractAutoSchema(AutoSchema):
@@ -84,10 +90,25 @@ class ExtractAutoSchema(AutoSchema):
                                 "maxLength": 255,
                                 "description": "Optional MIME type of the file. If given, format identification is not called.",
                             },
+                            "format_name": {
+                                "type": "string",
+                                "maxLength": 255,
+                                "description": "Optional name of the file's PRONOM format (for example `JPEG File Interchange Format`), shown as the `formatName` of the PRONOM format in `provenance.object`. Never derived: without it the PRONOM format has only its registry key.",
+                            },
+                            "format_version": {
+                                "type": "string",
+                                "maxLength": 64,
+                                "description": "Optional version of the PRONOM format (for example `1.01`). Only used together with `format_name`.",
+                            },
+                            "media_type_name": {
+                                "type": "string",
+                                "maxLength": 255,
+                                "description": "Optional name of the file's IANA media type (for example `jpeg`), shown as the `formatName` of the media type format.",
+                            },
                             "object_identifier": {
                                 "type": "string",
                                 "maxLength": 255,
-                                "description": "Optional identifier of the file's own PREMIS object (for example its path in the SIP). Echoed in the extraction event's `linkingObjectIdentifier`; must be given together with `object_identifier_type`. Without both, the event links the uploaded filename.",
+                                "description": "Optional identifier of the file's own PREMIS object (for example its path in the SIP). Echoed as the `objectIdentifier` of the PREMIS file object in `provenance.object`; must be given together with `object_identifier_type`. Without both, the object is identified by the uploaded filename, with type `filepath`.",
                             },
                             "object_identifier_type": {
                                 "type": "string",
@@ -109,8 +130,8 @@ class ExtractAutoSchema(AutoSchema):
 
         return {
             "200": {
-                "description": "Aggregated extraction result (JSON, or XML with `Accept: application/xml`).",
-                "content": _json_and_xml(load_result_schema()),
+                "description": "Aggregated extraction result (JSON, or its PREMIS part as a standalone `premis:premis` document with `Accept: application/premis+xml`; `Accept: application/xml` is answered with `406`).",
+                "content": _json_and_premis(load_result_schema()),
             },
             "400": error("Malformed request, e.g. missing or empty `file`."),
             "413": error("The uploaded file exceeds the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
@@ -271,7 +292,7 @@ class JobSubmitAutoSchema(ExtractAutoSchema):
             "202": {
                 "description": "Job accepted. `Location` points at the job's status resource.",
                 "headers": {"Location": {"schema": {"type": "string"}}},
-                "content": _json_and_xml(load_job_schema()),
+                "content": _json_only(load_job_schema()),
             },
             "400": _job_error("Malformed request, e.g. missing or empty `file`."),
             "404": _job_error("Asynchronous processing is disabled (`MES_ASYNC_ENABLED`)."),
@@ -291,8 +312,8 @@ class JobStatusAutoSchema(AutoSchema):
     def get_responses(self, path, method):
         return {
             "200": {
-                "description": "The job envelope (JSON, or XML with `Accept: application/xml`).",
-                "content": _json_and_xml(load_job_schema()),
+                "description": "The job envelope (JSON only; `Accept: application/xml` is answered with `406`).",
+                "content": _json_only(load_job_schema()),
             },
             "404": _job_error("Unknown or expired job, or asynchronous processing is disabled."),
         }
@@ -308,29 +329,12 @@ class JobResultAutoSchema(AutoSchema):
     def get_responses(self, path, method):
         return {
             "200": {
-                "description": "Exactly the `/extract/` result (JSON, or XML with `Accept: application/xml`).",
-                "content": _json_and_xml(load_result_schema()),
+                "description": "Exactly the `/extract/` result (JSON, or standalone PREMIS with `Accept: application/premis+xml`; `Accept: application/xml` is answered with `406`).",
+                "content": _json_and_premis(load_result_schema()),
             },
             "404": _job_error("Unknown or expired job, or asynchronous processing is disabled."),
             "409": _job_error("The job has not finished, or it failed and so has no result."),
         }
-
-
-def _inline_result_ref(node, result_schema):
-    """Replace the `$ref` to the mes-result schema by the schema itself (OpenAPI components cannot
-    resolve a `urn:` id)."""
-    if isinstance(node, list):
-        return [_inline_result_ref(item, result_schema) for item in node]
-    if not isinstance(node, dict):
-        return node
-    if node.get("$ref") == "urn:eden:mes:result:1":
-        return deepcopy(result_schema)
-    return {key: _inline_result_ref(value, result_schema) for key, value in node.items()}
-
-
-def load_batch_schema() -> dict:
-    batch = json.loads((SCHEMA_DIR / "mes-batch.schema.json").read_text())
-    return _to_openapi(_inline_result_ref(batch, load_result_schema()))
 
 
 def load_job_batch_schema() -> dict:
@@ -376,6 +380,21 @@ class _BatchRequestBodyMixin:
                                 "maxLength": 255,
                                 "description": "Optional MIME type, the default for every file without its own in `file_metadata`. If given, format identification is not called.",
                             },
+                            "format_name": {
+                                "type": "string",
+                                "maxLength": 255,
+                                "description": "Optional PRONOM format name, the default for every file without its own in `file_metadata`.",
+                            },
+                            "format_version": {
+                                "type": "string",
+                                "maxLength": 64,
+                                "description": "Optional PRONOM format version, the default for every file without its own. Only used together with `format_name`.",
+                            },
+                            "media_type_name": {
+                                "type": "string",
+                                "maxLength": 255,
+                                "description": "Optional name of the IANA media type, the default for every file without its own.",
+                            },
                             "file_metadata": {
                                 "type": "object",
                                 "description": (
@@ -392,6 +411,9 @@ class _BatchRequestBodyMixin:
                                     "properties": {
                                         "puid": {"type": "string", "maxLength": 64},
                                         "mime_type": {"type": "string", "maxLength": 255},
+                                        "format_name": {"type": "string", "maxLength": 255},
+                                        "format_version": {"type": "string", "maxLength": 64},
+                                        "media_type_name": {"type": "string", "maxLength": 255},
                                         "object_identifier": {"type": "string", "maxLength": 255},
                                         "object_identifier_type": {"type": "string", "maxLength": 64},
                                     },
@@ -413,30 +435,8 @@ class _BatchRequestBodyMixin:
         }
 
 
-class BatchExtractAutoSchema(_BatchRequestBodyMixin, AutoSchema):
-    """Several files in one request; one entry per file, in upload order."""
-
-    def get_operation_id(self, path, method):
-        return "extractMetadataBatch"
-
-    def get_responses(self, path, method):
-        return {
-            "200": {
-                "description": (
-                    "One entry per file, in upload order: its `result` (exactly what `/extract/` returns "
-                    "for that file) or `errors` if that file could not be processed. A batch with a failed "
-                    "file is still `200`. JSON, or XML with `Accept: application/xml`."
-                ),
-                "content": _json_and_xml(load_batch_schema()),
-            },
-            "400": _job_error("No files, too many files (`MES_MAX_FILES_PER_REQUEST`), an empty file, a request-level object identifier, or an invalid `file_metadata` (not JSON, an unknown or ambiguous filename, a bad value)."),
-            "413": _job_error("The files together exceed the configured maximum size (`MES_MAX_UPLOAD_BYTES`)."),
-            "500": _job_error("Unexpected error while processing the request."),
-        }
-
-
 class BatchJobSubmitAutoSchema(_BatchRequestBodyMixin, AutoSchema):
-    """Same multipart body as `/extract/batch/`; one job per file, all or none."""
+    """Several files in one multipart body (`files` repeated); one job per file, all or none."""
 
     def get_operation_id(self, path, method):
         return "submitJobBatch"
@@ -446,7 +446,7 @@ class BatchJobSubmitAutoSchema(_BatchRequestBodyMixin, AutoSchema):
             "202": {
                 "description": "Batch accepted. `Location` points at the batch status resource.",
                 "headers": {"Location": {"schema": {"type": "string"}}},
-                "content": _json_and_xml(load_job_batch_schema()),
+                "content": _json_only(load_job_batch_schema()),
             },
             "400": _job_error("No files, too many files, an empty file, a request-level object identifier, or an invalid `file_metadata` (not JSON, an unknown or ambiguous filename, a bad value)."),
             "404": _job_error("Asynchronous processing is disabled (`MES_ASYNC_ENABLED`)."),
@@ -466,8 +466,8 @@ class BatchJobStatusAutoSchema(AutoSchema):
     def get_responses(self, path, method):
         return {
             "200": {
-                "description": "The batch with the current status of each file's job (JSON, or XML with `Accept: application/xml`).",
-                "content": _json_and_xml(load_job_batch_schema()),
+                "description": "The batch with the current status of each file's job (JSON only; `Accept: application/xml` is answered with `406`).",
+                "content": _json_only(load_job_batch_schema()),
             },
             "404": _job_error("Unknown or expired batch, or asynchronous processing is disabled."),
         }

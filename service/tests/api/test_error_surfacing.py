@@ -72,11 +72,13 @@ class ErrorAndWarningSurfacingTests(TestCase):
         self.assertTrue(all(r.request_id == body["request_id"] for r in logs.records))
         self.assertTrue(any(r.levelname == "ERROR" for r in logs.records))
 
-    def test_validation_error_is_xml_when_requested(self):
-        response = self.client.post(self.url, {}, format="multipart", HTTP_ACCEPT="application/xml")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("application/xml", response["Content-Type"])
-        self.assertIn(b"errors", response.content)
+    def test_validation_error_is_json_whatever_xml_was_requested(self):
+        for accept, status in (("application/premis+xml", 400), ("application/xml", 406)):
+            with self.subTest(accept=accept):
+                response = self.client.post(self.url, {}, format="multipart", HTTP_ACCEPT=accept)
+                self.assertEqual(response.status_code, status)
+                self.assertIn("application/json", response["Content-Type"])
+                self.assertIn("errors", response.json())
 
     @mock.patch(
         "apps.api.views.ExtractionOrchestrator.extract", side_effect=RuntimeError("secret detail")
