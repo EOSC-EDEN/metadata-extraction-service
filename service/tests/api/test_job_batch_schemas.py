@@ -76,7 +76,7 @@ class JobBatchResponseSchemaTests(test_jobs_view.JobsViewTestCase):
     def _submit(self, **extra):
         files = [SimpleUploadedFile(f"{n}.jpg", b"data", content_type="image/jpeg") for n in range(2)]
         return self.client.post(
-            "/api/v1/jobs/batch/", {"files": files, "mime_type": "image/jpeg"}, format="multipart", **extra
+            "/api/v1/jobs/batch/", {"files": files}, format="multipart", **extra
         )
 
     def test_json_responses_validate(self, run):

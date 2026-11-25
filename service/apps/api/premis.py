@@ -25,7 +25,7 @@ MEDIA_TYPE_REGISTRY_NAME = "IANA Media types"
 OUTPUT_FORMAT_NOTE_PREFIX = "Output format: "
 EXECUTION_STATUS_NOTE_PREFIX = "Execution status: "
 
-TOOL_KEY_IDENTIFIER_TYPE = "MES"  # the configured tool name, next to the UUID, for clients that match on it
+TOOL_NOTE_PREFIX = "Tool: "  # the first agentNote of a tool agent: its configured name, for clients that match on it
 FFIS_AGENT_KEY = "ffis"
 FFIS_AGENT_NAME = "File Format Identification Service (FFIS)"
 FFIS_AGENT_ROLE = "executing program"
@@ -104,20 +104,18 @@ def _summary_detail(result) -> str:
     return detail
 
 
-def _identification_detail(result) -> str:
-    """`puid: ...; mime_type: ...; FFIS: <url>`, the parts that are known (the URL always is: FFIS was called)."""
-    parts = []
-    if result.puid:
-        parts.append(f"puid: {result.puid}")
-    if result.mime_type:
-        parts.append(f"mime_type: {result.mime_type}")
-    parts.append(f"FFIS: {result.identification_url}")
-    return "; ".join(parts)
-
-
 def _identification_details(result) -> list[dict]:
-    """The FFIS warnings (`ffis_unreachable`, `ffis_inconclusive`) as outcome notes; the tools' warnings stay on their events."""
-    return [_note(f"warning: {m}") for m in result.warnings if m.startswith(FFIS_WARNING_PREFIX)]
+    """What FFIS found, as outcome notes (`PUID: ...`, `Media type: ...`, only the known parts), then its own warnings.
+
+    The warnings are `ffis_unreachable` and `ffis_inconclusive`; the tools' warnings stay on their events.
+    """
+    notes = []
+    if result.puid:
+        notes.append(f"PUID: {result.puid}")
+    if result.mime_type:
+        notes.append(f"Media type: {result.mime_type}")
+    notes.extend(f"warning: {m}" for m in result.warnings if m.startswith(FFIS_WARNING_PREFIX))
+    return [_note(note) for note in notes]
 
 
 def _interval(start, end) -> str:
@@ -216,9 +214,10 @@ def build_identification_event(result, *, timestamp: str, agent_id: str) -> dict
     started, finished = result.identification_started_at, result.identification_finished_at
     date_time = _interval(started, finished) if started and finished else timestamp
     outcome = "success" if result.ffis_provenance is not None else "fail"
+    # No eventDetail: what FFIS found is the outcome of the event, and its URL is a note of its agent.
     return _event(
         date_time,
-        _identification_detail(result),
+        None,
         outcome,
         _identification_details(result),
         [_link(agent_id, FFIS_AGENT_ROLE)],
@@ -276,44 +275,24 @@ def build_events(
     return events
 
 
-def _format(registry_name: str, key: str, role: str | None = None, name=None, version=None) -> dict:
-    """One PREMIS `format`: the designation (only when the caller named the format), then the registry."""
-    format_ = {}
-    if name:
-        designation = {"formatName": name}
-        if version:
-            designation["formatVersion"] = version
-        format_["formatDesignation"] = designation
-    registry = {"formatRegistryName": registry_name, "formatRegistryKey": key}
-    if role:
-        registry["formatRegistryRole"] = role
-    format_["formatRegistry"] = registry
-    return format_
+def _format(registry_name: str, key: str) -> dict:
+    """One PREMIS `format`: its registry and key. No formatRegistryRole: PRONOM is not a specification library."""
+    return {"formatRegistry": {"formatRegistryName": registry_name, "formatRegistryKey": key}}
 
 
-def _formats(result, names: dict | None) -> list[dict]:
+def _formats(result) -> list[dict]:
     """A PRONOM format and an IANA media type format, whichever are known.
 
-    `names` holds the caller's `format_name` and `format_version` (for the PRONOM format) and
-    `media_type_name` (for the media type); a name is never invented. A version without a name is
-    dropped, because PREMIS has no designation without a name.
+    The PUID is the caller's or FFIS's; the media type is FFIS's (a caller cannot give one). The names of the
+    formats are not given: nothing would supply them.
     """
-    names = names or {}
     formats = []
     if result.puid:
-        formats.append(
-            _format(
-                "PRONOM",
-                result.puid,
-                "specification",
-                name=names.get("format_name"),
-                version=names.get("format_version"),
-            )
-        )
+        formats.append(_format("PRONOM", result.puid))
     if result.mime_type:
-        formats.append(_format(MEDIA_TYPE_REGISTRY_NAME, result.mime_type, name=names.get("media_type_name")))
+        formats.append(_format(MEDIA_TYPE_REGISTRY_NAME, result.mime_type))
     if not formats:  # PREMIS requires a format; no registry key is known
-        formats.append({"formatDesignation": {"formatName": names.get("format_name") or UNKNOWN_FORMAT_NAME}})
+        formats.append({"formatDesignation": {"formatName": UNKNOWN_FORMAT_NAME}})
     return formats
 
 
@@ -340,7 +319,6 @@ def build_object(
     events: list[dict],
     object_identifier: str | None = None,
     object_identifier_type: str | None = None,
-    format_names: dict | None = None,
     file_fixity: dict | None = None,
 ) -> dict:
     """The file the extraction ran on, linking every event.
@@ -357,7 +335,7 @@ def build_object(
         "objectIdentifier": [
             {"objectIdentifierType": object_type, "objectIdentifierValue": object_value}
         ],
-        "objectCharacteristics": [{**_fixity_and_size(file_fixity), "format": _formats(result, format_names)}],
+        "objectCharacteristics": [{**_fixity_and_size(file_fixity), "format": _formats(result)}],
         "linkingEventIdentifier": [
             {
                 "linkingEventIdentifierType": e["eventIdentifier"]["eventIdentifierType"],
@@ -380,24 +358,21 @@ def _agent(
     agent_id: str,
     name: str,
     version: str | None,
-    url: str | None = None,
     tool_key: str | None = None,
-    note: str | None = None,
+    notes: list[str] | None = None,
 ) -> dict:
-    identifiers = [{"agentIdentifierType": AGENT_IDENTIFIER_TYPE, "agentIdentifierValue": agent_id}]
-    if tool_key:
-        identifiers.append({"agentIdentifierType": TOOL_KEY_IDENTIFIER_TYPE, "agentIdentifierValue": tool_key})
-    if url:
-        identifiers.append({"agentIdentifierType": "URL", "agentIdentifierValue": url})
+    # One identifier per agent, so the link between an event and its agent is unambiguous: extra information
+    # (the tool name, the URL of FFIS) goes into agentNote.
     agent = {
-        "agentIdentifier": identifiers,
+        "agentIdentifier": [{"agentIdentifierType": AGENT_IDENTIFIER_TYPE, "agentIdentifierValue": agent_id}],
         "agentName": [name],
         "agentType": AGENT_TYPE,
     }
     if version is not None:
         agent["agentVersion"] = version
-    if note:
-        agent["agentNote"] = [note]
+    notes = ([f"{TOOL_NOTE_PREFIX}{tool_key}"] if tool_key else []) + list(notes or [])
+    if notes:
+        agent["agentNote"] = notes
     return agent
 
 
@@ -438,8 +413,8 @@ def build_agents(result, *, service_version: str, agent_ids: dict[str, str]) -> 
                 agent_ids[FFIS_AGENT_KEY],
                 FFIS_AGENT_NAME,
                 None,
-                url=result.identification_url,
-                note=_ffis_note(result.ffis_provenance),
+                # FFIS has one identifier; its URL and what it reported are notes
+                notes=[f"URL: {result.identification_url}", *filter(None, [_ffis_note(result.ffis_provenance)])],
             )
         )
     agents.extend(

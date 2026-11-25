@@ -37,7 +37,7 @@ class PremisDocumentTests(TestCase):
 
     def _extract(self, **kwargs):
         return self.client.post(
-            "/api/v1/extract/", {"file": _upload(), "mime_type": "image/jpeg"}, format="multipart", **kwargs
+            "/api/v1/extract/", {"file": _upload()}, format="multipart", **kwargs
         )
 
     def test_accept_header_gives_a_valid_premis_document(self, run):
@@ -125,7 +125,7 @@ class ExactRawOutputTests(TestCase):
         run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
         response = APIClient().post(
             "/api/v1/extract/",
-            {"file": _upload(), "mime_type": "image/jpeg"},
+            {"file": _upload()},
             format="multipart",
             QUERY_STRING=query,
         )
@@ -187,7 +187,7 @@ class ExactRawOutputTests(TestCase):
         run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=RDF, stderr="")
         response = APIClient().post(
             "/api/v1/extract/",
-            {"file": _upload(), "mime_type": "image/jpeg"},
+            {"file": _upload()},
             format="multipart",
             HTTP_ACCEPT="application/xml",
             QUERY_STRING="raw=exact",
@@ -216,8 +216,11 @@ class FfisAgentDocumentTests(TestCase):
         self.assertEqual(names[1], "File Format Identification Service (FFIS)")
         events = root.findall("p:event", P)
         self.assertEqual([e.findtext("p:eventType", namespaces=P) for e in events], ["format identification", "metadata extraction", "metadata extraction"])
-        detail = events[0].findtext("p:eventDetailInformation/p:eventDetail", namespaces=P)
-        self.assertEqual(detail, "puid: fmt/43; mime_type: image/jpeg; FFIS: http://ffis.example:8001")
+        self.assertIsNone(events[0].find("p:eventDetailInformation", P))
+        notes = [n.text for n in events[0].iterfind("p:eventOutcomeInformation/p:eventOutcomeDetail/p:eventOutcomeDetailNote", P)]
+        self.assertEqual(notes, ["PUID: fmt/43", "Media type: image/jpeg"])
+        ffis_notes = [n.text for n in root.findall("p:agent", P)[1].iterfind("p:agentNote", P)]
+        self.assertEqual(ffis_notes[0], "URL: http://ffis.example:8001")
         ffis_id = root.findall("p:agent", P)[1].findtext("p:agentIdentifier/p:agentIdentifierValue", namespaces=P)
         self.assertEqual(events[0].findtext("p:linkingAgentIdentifier/p:linkingAgentIdentifierValue", namespaces=P), ffis_id)
         linked = [e.text for e in root.iterfind("p:object/p:linkingEventIdentifier/p:linkingEventIdentifierValue", P)]
@@ -230,7 +233,7 @@ class ObjectFixityDocumentTests(TestCase):
         run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=RDF, stderr="")
         response = APIClient().post(
             "/api/v1/extract/",
-            {"file": _upload(content=b"hello"), "mime_type": "image/jpeg"},
+            {"file": _upload(content=b"hello")},
             format="multipart",
             HTTP_ACCEPT=MEDIA_TYPE,
         )

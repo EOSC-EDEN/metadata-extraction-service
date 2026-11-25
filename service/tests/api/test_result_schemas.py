@@ -67,7 +67,6 @@ def _object():
                         "formatRegistry": {
                             "formatRegistryName": "PRONOM",
                             "formatRegistryKey": "fmt/43",
-                            "formatRegistryRole": "specification",
                         }
                     },
                     {"formatRegistry": {"formatRegistryName": "IANA media types", "formatRegistryKey": "image/jpeg"}},
@@ -264,7 +263,7 @@ class EndpointSchemaTests(TestCase):
                 args=[], returncode=0, stdout='[{"a": 1}]', stderr=""
             )
             return self.client.post(
-                self.url, {"file": upload, "mime_type": "image/jpeg"}, format="multipart", **extra
+                self.url, {"file": upload}, format="multipart", **extra
             )
 
     def test_json_response_validates(self):
@@ -291,7 +290,7 @@ class EndpointSchemaTests(TestCase):
         with mock.patch("apps.extraction.adapters.base.subprocess.run") as run:
             run.side_effect = OSError("Error: File format error")
             response = self.client.post(
-                self.url, {"file": upload, "mime_type": "image/jpeg"}, format="multipart"
+                self.url, {"file": upload}, format="multipart"
             )
         body = response.json()
         _json_validator().validate(body)

@@ -40,7 +40,7 @@ class UploadDirTestCase(TestCase):
 class SyncUploadDirTests(UploadDirTestCase):
     def test_the_tool_reads_the_file_from_the_upload_dir_and_nothing_is_left(self, run):
         response = self.client.post(
-            "/api/v1/extract/", {"file": _upload(), "mime_type": "image/jpeg"}, format="multipart"
+            "/api/v1/extract/", {"file": _upload()}, format="multipart"
         )
         self.assertEqual(response.status_code, 200)
         command = run.call_args[0][0]
@@ -66,7 +66,7 @@ class JobUploadDirTests(UploadDirTestCase):
 
     def _submit(self):
         return self.client.post(
-            "/api/v1/jobs/", {"file": _upload(), "mime_type": "image/jpeg"}, format="multipart"
+            "/api/v1/jobs/", {"file": _upload()}, format="multipart"
         )
 
     def test_a_waiting_job_keeps_its_upload_in_the_upload_dir_until_it_finishes(self, _run):

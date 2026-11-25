@@ -298,3 +298,12 @@ class LocalRuleResolutionTests(TestCase):
             filename="a.jpg",
         )
         self.assertEqual(resolution.selection_method, "local_rule")
+        self.assertEqual(resolution.mime_type, "image/jpeg")
+
+    def test_an_extension_rule_applies_even_when_the_callers_puid_matches_no_rule(self):
+        resolution = self.resolve(
+            "rules:\n- {name: a, extensions: [jpg], tools: [ffprobe]}\n",
+            puid="fmt/999",
+            filename="a.jpg",
+        )
+        self.assertEqual(resolution.selection_method, "local_rule")

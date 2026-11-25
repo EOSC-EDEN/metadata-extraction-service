@@ -33,7 +33,7 @@ class RawOutputEmbeddingTests(TestCase):
             run.side_effect = kwargs["side_effect"]
         response = APIClient().post(
             "/api/v1/extract/",
-            {"file": SimpleUploadedFile("upload.jpg", b"data", content_type="image/jpeg"), "mime_type": "image/jpeg"},
+            {"file": SimpleUploadedFile("upload.jpg", b"data", content_type="image/jpeg")},
             format="multipart",
             HTTP_ACCEPT="application/premis+xml",
         )
@@ -63,7 +63,7 @@ class RawOutputEmbeddingTests(TestCase):
         run.return_value = _ok(RDF)
         body = APIClient().post(
             "/api/v1/extract/",
-            {"file": SimpleUploadedFile("upload.jpg", b"data", content_type="image/jpeg"), "mime_type": "image/jpeg"},
+            {"file": SimpleUploadedFile("upload.jpg", b"data", content_type="image/jpeg")},
             format="multipart",
         ).json()
         self.assertEqual(body["results"][0]["raw_output"], RDF)
@@ -116,7 +116,7 @@ class RawOutputEmbeddingTests(TestCase):
             APIClient()
             .post(
                 "/api/v1/extract/",
-                {"file": SimpleUploadedFile("upload.jpg", b"data"), "mime_type": "image/jpeg"},
+                {"file": SimpleUploadedFile("upload.jpg", b"data")},
                 format="multipart",
             )
             .json()
@@ -176,7 +176,7 @@ class SplicedOutputTests(TestCase):
         run.return_value = _ok(stdout)
         response = APIClient().post(
             "/api/v1/extract/" + query,
-            {"file": SimpleUploadedFile("upload.jpg", b"data", content_type="image/jpeg"), "mime_type": "image/jpeg"},
+            {"file": SimpleUploadedFile("upload.jpg", b"data", content_type="image/jpeg")},
             format="multipart",
             HTTP_ACCEPT=accept,
         )
@@ -202,7 +202,7 @@ class SplicedOutputTests(TestCase):
         run.return_value = _ok("<a><b/></a>")
         response = APIClient().post(
             "/api/v1/extract/",
-            {"file": SimpleUploadedFile("f.jpg", b"data", content_type="image/jpeg"), "mime_type": "image/jpeg"},
+            {"file": SimpleUploadedFile("f.jpg", b"data", content_type="image/jpeg")},
             format="multipart",
             HTTP_ACCEPT="application/premis+xml",
         )

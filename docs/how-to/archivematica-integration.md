@@ -80,13 +80,13 @@ Under **Characterization**, click **Commands**, then **Create new command**, and
 
 Leave the other fields empty and click **Save**.
 
-![The Create command form with the MES script, output format XML (fmt/101) and command usage Characterization.](img/am-fpr-command-create.png)
+![The Create command form with the MES Python script, script type Python script, output format XML (fmt/101) and command usage Characterization.](img/am-fpr-command-create.png)
 
 !!! warning
     Set the output format to XML (fmt/101). Archivematica only stores the output of a characterization command when that format is set. Otherwise it logs that the output is not XML and does not save it.
 
 !!! note
-    For a Python script, Archivematica does not replace `%inputFile%` in the text. It passes the values as options (`--input-file=…`), which the script reads. The screenshot above shows an earlier bash version of the command; fill in the fields as in the table.
+    For a Python script, Archivematica does not replace `%inputFile%` in the text. It passes the values as options (`--input-file=…`), which the script reads.
 
 ```python
 import argparse
@@ -131,11 +131,11 @@ def mes(method, path, **kwargs):
 def tool_outputs(premis):
     """(tool, format, text) of every tool that succeeded, taken from the PREMIS document."""
     root = ET.fromstring(premis)
-    tools = {}  # agent UUID -> tool name; only a tool agent has an identifier of type MES
+    tools = {}  # agent UUID -> tool name; the first agentNote of a tool agent is "Tool: <name>"
     for agent in root.iter(NS + "agent"):
-        ids = {i.findtext(NS + "agentIdentifierType"): i.findtext(NS + "agentIdentifierValue") for i in agent.findall(NS + "agentIdentifier")}
-        if "MES" in ids:
-            tools[ids["UUID"]] = ids["MES"]
+        note = agent.findtext(NS + "agentNote") or ""
+        if note.startswith("Tool: "):
+            tools[agent.findtext(f"{NS}agentIdentifier/{NS}agentIdentifierValue")] = note[len("Tool: "):]
     for event in root.iter(NS + "event"):
         # Only a tool that succeeded has the exact copy of its output: a rawOutput with a sha256 (from ?raw=exact).
         raw = event.find(f".//{NS}eventOutcomeDetailExtension/rawOutput[@sha256]")
@@ -305,11 +305,11 @@ def mes(method, path, **kwargs):
 def tool_outputs(premis):
     """(tool, format, text) of every tool that succeeded, taken from the PREMIS document."""
     root = ET.fromstring(premis)
-    tools = {}  # agent UUID -> tool name; only a tool agent has an identifier of type MES
+    tools = {}  # agent UUID -> tool name; the first agentNote of a tool agent is "Tool: <name>"
     for agent in root.iter(NS + "agent"):
-        ids = {i.findtext(NS + "agentIdentifierType"): i.findtext(NS + "agentIdentifierValue") for i in agent.findall(NS + "agentIdentifier")}
-        if "MES" in ids:
-            tools[ids["UUID"]] = ids["MES"]
+        note = agent.findtext(NS + "agentNote") or ""
+        if note.startswith("Tool: "):
+            tools[agent.findtext(f"{NS}agentIdentifier/{NS}agentIdentifierValue")] = note[len("Tool: "):]
     for event in root.iter(NS + "event"):
         # Only a tool that succeeded has the exact copy of its output: a rawOutput with a sha256 (from ?raw=exact).
         raw = event.find(f".//{NS}eventOutcomeDetailExtension/rawOutput[@sha256]")

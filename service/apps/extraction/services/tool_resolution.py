@@ -102,7 +102,7 @@ def _identify(file_path, puid, mime_type, ffis_client) -> ToolResolution:
     def resolution(selection_method, **kwargs):
         return ToolResolution(tools=tools, selection_method=selection_method, **kwargs)
 
-    if puid or mime_type:
+    if puid or mime_type:  # a hint from the caller replaces identification
         return resolution("default_tool_caller_identified", puid=puid, mime_type=mime_type)
 
     if not settings.MES_FFIS_ENABLED:

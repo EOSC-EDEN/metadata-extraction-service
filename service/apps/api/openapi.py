@@ -90,21 +90,6 @@ class ExtractAutoSchema(AutoSchema):
                                 "maxLength": 255,
                                 "description": "Optional MIME type of the file. If given, format identification is not called.",
                             },
-                            "format_name": {
-                                "type": "string",
-                                "maxLength": 255,
-                                "description": "Optional name of the file's PRONOM format (for example `JPEG File Interchange Format`), shown as the `formatName` of the PRONOM format in `provenance.object`. Never derived: without it the PRONOM format has only its registry key.",
-                            },
-                            "format_version": {
-                                "type": "string",
-                                "maxLength": 64,
-                                "description": "Optional version of the PRONOM format (for example `1.01`). Only used together with `format_name`.",
-                            },
-                            "media_type_name": {
-                                "type": "string",
-                                "maxLength": 255,
-                                "description": "Optional name of the file's IANA media type (for example `jpeg`), shown as the `formatName` of the media type format.",
-                            },
                             "object_identifier": {
                                 "type": "string",
                                 "maxLength": 255,
@@ -380,21 +365,6 @@ class _BatchRequestBodyMixin:
                                 "maxLength": 255,
                                 "description": "Optional MIME type, the default for every file without its own in `file_metadata`. If given, format identification is not called.",
                             },
-                            "format_name": {
-                                "type": "string",
-                                "maxLength": 255,
-                                "description": "Optional PRONOM format name, the default for every file without its own in `file_metadata`.",
-                            },
-                            "format_version": {
-                                "type": "string",
-                                "maxLength": 64,
-                                "description": "Optional PRONOM format version, the default for every file without its own. Only used together with `format_name`.",
-                            },
-                            "media_type_name": {
-                                "type": "string",
-                                "maxLength": 255,
-                                "description": "Optional name of the IANA media type, the default for every file without its own.",
-                            },
                             "file_metadata": {
                                 "type": "object",
                                 "description": (
@@ -411,9 +381,6 @@ class _BatchRequestBodyMixin:
                                     "properties": {
                                         "puid": {"type": "string", "maxLength": 64},
                                         "mime_type": {"type": "string", "maxLength": 255},
-                                        "format_name": {"type": "string", "maxLength": 255},
-                                        "format_version": {"type": "string", "maxLength": 64},
-                                        "media_type_name": {"type": "string", "maxLength": 255},
                                         "object_identifier": {"type": "string", "maxLength": 255},
                                         "object_identifier_type": {"type": "string", "maxLength": 64},
                                     },

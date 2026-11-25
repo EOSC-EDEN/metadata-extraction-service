@@ -164,9 +164,6 @@
                             },
                             "formatRegistryKey": {
                               "type": "string"
-                            },
-                            "formatRegistryRole": {
-                              "type": "string"
                             }
                           }
                         },

@@ -57,7 +57,7 @@ class LocalRuleEndpointTests(JobsViewTestCase):
 
     def test_async_result_equals_the_sync_result(self, _run):
         sync = self.extract().json()
-        job_id = self.submit(mime_type="").json()["job_id"]
+        job_id = self.submit().json()["job_id"]
         result = self.client.get(f"{SUBMIT}{job_id}/result/").json()
         self.assertEqual(result["tool_resolution"]["matched_rules"], ["jpeg-only"])
         self.assertEqual(_volatile_stripped(result), _volatile_stripped(sync))

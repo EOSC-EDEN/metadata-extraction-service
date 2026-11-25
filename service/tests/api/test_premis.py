@@ -307,64 +307,29 @@ class BuildObjectTests(SimpleTestCase):
         self.assertEqual(
             characteristics["format"],
             [
-                {
-                    "formatRegistry": {
-                        "formatRegistryName": "PRONOM",
-                        "formatRegistryKey": "fmt/43",
-                        "formatRegistryRole": "specification",
-                    }
-                },
+                {"formatRegistry": {"formatRegistryName": "PRONOM", "formatRegistryKey": "fmt/43"}},
                 {"formatRegistry": {"formatRegistryName": "IANA Media types", "formatRegistryKey": "image/jpeg"}},
             ],
         )
+
+    def test_no_format_registry_has_a_role(self):
+        # reviewer's comment: PRONOM is not a specification library, so no formatRegistryRole is given
+        for resolution in (
+            dict(puid="fmt/43", mime_type="image/jpeg"),
+            dict(puid="fmt/43"),
+            dict(mime_type="image/jpeg"),
+            dict(),
+        ):
+            with self.subTest(resolution=resolution):
+                formats = _object(replace(_result([_tool("a")]), **resolution))["objectCharacteristics"][0]["format"]
+                for format_ in formats:
+                    self.assertNotIn("formatRegistryRole", format_.get("formatRegistry", {}))
 
     def test_only_the_known_format_is_listed(self):
         puid_only = _object(replace(_result([_tool("a")]), puid="fmt/43"))["objectCharacteristics"][0]["format"]
         self.assertEqual([f["formatRegistry"]["formatRegistryName"] for f in puid_only], ["PRONOM"])
         mime_only = _object(replace(_result([_tool("a")]), mime_type="image/jpeg"))["objectCharacteristics"][0]["format"]
         self.assertEqual([f["formatRegistry"]["formatRegistryName"] for f in mime_only], ["IANA Media types"])
-
-    def _formats(self, names, **resolution):
-        result = replace(_result([_tool("a")]), **resolution)
-        return _object(result, format_names=names)["objectCharacteristics"][0]["format"]
-
-    def test_designations_come_from_the_callers_names_and_sit_before_the_registry(self):
-        formats = self._formats(
-            {"format_name": "JPEG File Interchange Format", "format_version": "1.01", "media_type_name": "jpeg"},
-            puid="fmt/43",
-            mime_type="image/jpeg",
-        )
-        self.assertEqual(
-            [list(f) for f in formats], [["formatDesignation", "formatRegistry"]] * 2
-        )
-        self.assertEqual(
-            formats[0]["formatDesignation"],
-            {"formatName": "JPEG File Interchange Format", "formatVersion": "1.01"},
-        )
-        self.assertEqual(formats[1]["formatDesignation"], {"formatName": "jpeg"})
-
-    def test_names_are_kept_apart_per_format(self):
-        formats = self._formats({"media_type_name": "jpeg"}, puid="fmt/43", mime_type="image/jpeg")
-        self.assertNotIn("formatDesignation", formats[0])
-        self.assertEqual(formats[1]["formatDesignation"], {"formatName": "jpeg"})
-
-    def test_no_names_means_no_designation(self):
-        for names in (None, {}):
-            for format_ in self._formats(names, puid="fmt/43", mime_type="image/jpeg"):
-                self.assertNotIn("formatDesignation", format_)
-
-    def test_a_version_without_a_name_is_dropped(self):
-        (format_,) = self._formats({"format_version": "1.01"}, puid="fmt/43")
-        self.assertNotIn("formatDesignation", format_)
-
-    def test_names_for_a_format_that_is_not_known_are_not_invented(self):
-        formats = self._formats({"media_type_name": "jpeg"}, puid="fmt/43")
-        self.assertEqual(len(formats), 1)
-        self.assertNotIn("formatDesignation", formats[0])
-
-    def test_unidentified_file_uses_the_callers_format_name_as_designation(self):
-        (format_,) = self._formats({"format_name": "Mystery"})
-        self.assertEqual(format_, {"formatDesignation": {"formatName": "Mystery"}})
 
     def test_unidentified_file_gets_a_designation_because_premis_requires_a_format(self):
         (fmt,) = _object(_result([_tool("a")]))["objectCharacteristics"][0]["format"]
@@ -462,7 +427,7 @@ class EventEndpointTests(TestCase):
 
     def _post(self, **fields):
         return self.client.post(
-            self.url, {"file": _upload(), "mime_type": "image/jpeg", **fields}, format="multipart"
+            self.url, {"file": _upload(), **fields}, format="multipart"
         )
 
     def test_object_events_and_agents_on_a_successful_response(self, run):
@@ -483,53 +448,27 @@ class EventEndpointTests(TestCase):
         self.assertEqual(prov["agents"][0]["agentVersion"], SERVICE_VERSION)
         self.assertNotIn("event", prov)
 
-    def test_request_format_names_reach_the_object(self, run):
-        run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
-        body = self._post(
-            puid="fmt/43",
-            format_name="JPEG File Interchange Format",
-            format_version="1.01",
-            media_type_name="jpeg",
-        ).json()
-        formats = body["provenance"]["object"]["objectCharacteristics"][0]["format"]
-        self.assertEqual(
-            [f["formatDesignation"] for f in formats],
-            [{"formatName": "JPEG File Interchange Format", "formatVersion": "1.01"}, {"formatName": "jpeg"}],
-        )
-
-    def test_blank_format_names_count_as_not_given(self, run):
-        run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
-        body = self._post(format_name="", format_version="", media_type_name="").json()
-        for format_ in body["provenance"]["object"]["objectCharacteristics"][0]["format"]:
-            self.assertNotIn("formatDesignation", format_)
-
-    def test_format_name_length_boundaries(self, run):
-        run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
-        cases = [
-            ("format_name", 255, 200),
-            ("format_name", 256, 400),
-            ("format_version", 64, 200),
-            ("format_version", 65, 400),
-            ("media_type_name", 255, 200),
-            ("media_type_name", 256, 400),
-        ]
-        for field, length, expected in cases:
-            self.assertEqual(self._post(**{field: "x" * length}).status_code, expected, (field, length))
-
-    def test_object_carries_the_resolved_format(self, run):
-        run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
-        body = self._post().json()
-        keys = [
+    def _format_keys(self, body):
+        return [
             f["formatRegistry"]["formatRegistryKey"]
             for f in body["provenance"]["object"]["objectCharacteristics"][0]["format"]
         ]
-        self.assertIn("image/jpeg", keys)
+
+    def test_object_carries_the_callers_puid_and_mime_type_as_registries(self, run):
+        run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        body = self._post(puid="fmt/43", mime_type="image/jpeg").json()
+        self.assertEqual(self._format_keys(body), ["fmt/43", "image/jpeg"])
+
+    def test_object_has_only_the_registry_the_caller_gave(self, run):
+        run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        self.assertEqual(self._format_keys(self._post(puid="fmt/43").json()), ["fmt/43"])
+        self.assertEqual(self._format_keys(self._post(mime_type="image/jpeg").json()), ["image/jpeg"])
 
     def test_xml_carries_the_vocabulary_attributes(self, run):
         run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
         response = self.client.post(
             self.url,
-            {"file": _upload(), "mime_type": "image/jpeg"},
+            {"file": _upload()},
             format="multipart",
             HTTP_ACCEPT="application/premis+xml",
         )
@@ -621,12 +560,23 @@ class ToolSelectionTests(SimpleTestCase):
 
         self.assertEqual([a["agentName"][0] for a in agents][:3], ["Metadata Extraction Service", premis.FFIS_AGENT_NAME, "a"])
         ffis = agents[1]
+        # one identifier only, so the link between an event and its agent stays unambiguous (reviewer's comment);
+        # the URL of FFIS is an agentNote
         self.assertEqual(
             [(i["agentIdentifierType"], i["agentIdentifierValue"]) for i in ffis["agentIdentifier"]],
-            [("UUID", ids["ffis"]), ("URL", self.FFIS)],
+            [("UUID", ids["ffis"])],
         )
+        self.assertEqual(ffis["agentNote"][0], f"URL: {self.FFIS}")
         self.assertEqual(ffis["agentType"], "software")
         self.assertNotIn("agentVersion", ffis)
+
+    def test_the_ffis_agent_has_a_url_note_whatever_ffis_reported(self):
+        for provenance in ({"outcome": "success"}, {}, None):
+            with self.subTest(provenance=provenance):
+                result = replace(_result([_tool("a")]), identification_url=self.FFIS, ffis_provenance=provenance)
+                ffis = _agents(result)[1]
+                self.assertEqual(len(ffis["agentIdentifier"]), 1)
+                self.assertEqual(ffis["agentNote"][0], f"URL: {self.FFIS}")
 
     def test_every_agent_is_linked_by_an_event(self):
         result = self._identified(identification_url=self.FFIS)
@@ -684,17 +634,34 @@ class IdentificationEventTests(SimpleTestCase):
         links = _summary(result, agent_ids=ids)["linkingAgentIdentifier"]
         self.assertEqual([l["linkingAgentIdentifierValue"] for l in links], [ids["mes-service"]])
 
-    def test_the_detail_has_the_known_parts_only(self):
+    def _notes(self, event):
+        return [d["eventOutcomeDetailNote"] for d in event["eventOutcomeInformation"][0].get("eventOutcomeDetail", [])]
+
+    def test_the_puid_and_the_media_type_are_outcome_notes_for_the_known_parts_only(self):
+        # reviewer's comment: what FFIS found is the outcome of the event, not its detail
         cases = [
-            (dict(), "puid: fmt/43; mime_type: image/jpeg; FFIS: " + self.FFIS),
-            (dict(mime_type=None), "puid: fmt/43; FFIS: " + self.FFIS),
-            (dict(puid=None), "mime_type: image/jpeg; FFIS: " + self.FFIS),
-            (dict(puid=None, mime_type=None), "FFIS: " + self.FFIS),
+            (dict(), ["PUID: fmt/43", "Media type: image/jpeg"]),
+            (dict(mime_type=None), ["PUID: fmt/43"]),
+            (dict(puid=None), ["Media type: image/jpeg"]),
+            (dict(puid=None, mime_type=None), []),
         ]
         for fields, expected in cases:
             with self.subTest(fields=fields):
                 _, event = self._identification(self._consulted(**fields))
-                self.assertEqual([d["eventDetail"] for d in event["eventDetailInformation"]], [expected])
+                self.assertEqual(self._notes(event), expected)
+
+    def test_the_identification_event_has_no_event_detail_and_no_url(self):
+        # the URL of FFIS is the agentNote of its agent, so the event does not repeat it
+        for fields in (dict(), dict(puid=None, mime_type=None)):
+            with self.subTest(fields=fields):
+                _, event = self._identification(self._consulted(**fields))
+                self.assertNotIn("eventDetailInformation", event)
+                self.assertFalse(any(self.FFIS in note for note in self._notes(event)))
+
+    def test_the_notes_come_before_a_warning_of_ffis(self):
+        result = self._consulted(warnings=["ffis_unreachable: x"])  # an identified file that also warned
+        _, event = self._identification(result)
+        self.assertEqual(self._notes(event), ["PUID: fmt/43", "Media type: image/jpeg", "warning: ffis_unreachable: x"])
 
     def test_the_date_time_is_the_interval_of_the_ffis_call(self):
         _, event = self._identification(self._consulted())
@@ -727,21 +694,17 @@ class IdentificationEventTests(SimpleTestCase):
                 result = replace(result, puid=None, mime_type=None)
                 _, event = self._identification(result)
                 self.assertEqual(_outcome(event), "fail")
-                notes = [d["eventOutcomeDetailNote"] for d in event["eventOutcomeInformation"][0]["eventOutcomeDetail"]]
-                self.assertEqual(notes, [f"warning: {warning}"])  # only the FFIS warning, not the tools'
-                self.assertEqual(
-                    [d["eventDetail"] for d in event["eventDetailInformation"]], ["FFIS: " + self.FFIS]
-                )
+                self.assertEqual(self._notes(event), [f"warning: {warning}"])  # only the FFIS warning, not the tools'
+                self.assertNotIn("eventDetailInformation", event)
 
-    def test_a_successful_identification_has_no_outcome_detail(self):
+    def test_a_successful_identification_notes_what_it_found_and_nothing_else(self):
         _, event = self._identification(self._consulted())
-        self.assertNotIn("eventOutcomeDetail", event["eventOutcomeInformation"][0])
+        self.assertEqual(self._notes(event), ["PUID: fmt/43", "Media type: image/jpeg"])
 
     def test_local_rules_after_a_failed_identification_still_record_the_failed_call(self):
         result = replace(
             self._consulted(ffis_provenance=None, warnings=["ffis_inconclusive: nothing"]),
             puid=None,
-            mime_type=None,
             selection_method="local_rule",
         )
         _, event = self._identification(result)
@@ -847,16 +810,32 @@ class RequestDetailTests(SimpleTestCase):
         self.assertIn("Original name: x.jpg", details)
         self.assertIn(f"Request timestamp: {data['provenance']['timestamp']}", details)
 
-    def test_each_tool_agent_has_its_configured_name_as_a_second_identifier(self):
-        result = _result([_tool("a"), _tool("b")])
+    def test_every_agent_has_one_identifier_and_a_tool_agent_names_its_tool_in_the_first_note(self):
+        # one agentIdentifier per agent (reviewer's comment); the configured tool name is the first agentNote
+        result = _result([_tool("a"), _tool("exiftool")])
         ids = premis.new_agent_ids(result)
-        service, a, b = _agents(result, agent_ids=ids)
+        service, a, exiftool = _agents(result, agent_ids=ids)
         self.assertEqual(len(service["agentIdentifier"]), 1)
-        for agent, key in ((a, "a"), (b, "b")):
+        self.assertNotIn("agentNote", service)  # the service is no tool
+        for agent, key in ((a, "a"), (exiftool, "exiftool")):
             self.assertEqual(
                 [(i["agentIdentifierType"], i["agentIdentifierValue"]) for i in agent["agentIdentifier"]],
-                [("UUID", ids[key]), ("MES", key)],
+                [("UUID", ids[key])],
             )
+            self.assertEqual(agent["agentNote"], [f"Tool: {key}"])
+
+    def test_the_tool_note_holds_the_configured_name_and_not_the_display_name(self):
+        result = _result([_tool("exiftool"), _tool("mediainfo"), _tool("ffprobe")])
+        agents = _agents(result)[1:]
+        self.assertEqual([a["agentName"][0] for a in agents], ["Exiftool", "MediaInfo", "ffprobe"])
+        self.assertEqual([a["agentNote"][0] for a in agents], ["Tool: exiftool", "Tool: mediainfo", "Tool: ffprobe"])
+
+    def test_no_agent_has_more_than_one_identifier_in_any_case(self):
+        result = replace(_result([_tool("a"), _tool("b")]), identification_url=self.FFIS_URL, ffis_provenance={"outcome": "success"})
+        for agent in _agents(result):
+            self.assertEqual(len(agent["agentIdentifier"]), 1, agent["agentName"])
+
+    FFIS_URL = "https://ffis.example/api"
 
     def test_the_ffis_agent_note_is_short_and_only_from_what_ffis_reported(self):
         provenance = {"outcome": "success", "tools": [{"name": "siegfried"}, {"name": "magika", "error": "x"}, {}]}
@@ -873,7 +852,7 @@ class RequestDetailTests(SimpleTestCase):
                     _result([_tool("a")]), identification_url="https://f", ffis_provenance=provenance_value
                 )
                 ffis = _agents(result)[1]
-                self.assertEqual(ffis.get("agentNote"), [expected] if expected else None)
+                self.assertEqual(ffis["agentNote"], ["URL: https://f"] + ([expected] if expected else []))
 
     def test_request_level_error_categories_are_notes_of_the_summary_event_without_an_extension(self):
         result = _result([_tool("a")], errors=[ErrorDetail("bad", "wrong_format"), ErrorDetail("worse", "unknown")])

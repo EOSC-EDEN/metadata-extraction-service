@@ -19,7 +19,7 @@ class RejectedRequestLogTests(TestCase):
         for accept in ("application/xml", "text/xml", "application/xml;q=1.0, text/xml;q=0.9"):
             with self.subTest(accept=accept), self._log() as logs:
                 response = APIClient().post(
-                    "/api/v1/extract/", {"file": _file(), "mime_type": "image/jpeg"}, format="multipart", HTTP_ACCEPT=accept
+                    "/api/v1/extract/", {"file": _file()}, format="multipart", HTTP_ACCEPT=accept
                 )
                 self.assertEqual(response.status_code, 406)
             message = logs.records[0].getMessage()

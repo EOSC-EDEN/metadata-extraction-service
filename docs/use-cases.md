@@ -108,9 +108,9 @@ flowchart LR
 - **Precondition:** the file is within the maximum size shown on the page.
 - **Main flow:**
   1. The researcher opens the web interface. It shows the maximum file size and the tools that are available.
-  2. The researcher drops or selects a file and starts the extraction.
-  3. The interface shows the identified format, any errors and warnings, and the output of each tool.
-  4. The researcher can choose to extract another file.
+  2. The researcher drops or selects one or more files, optionally fills in a format hint and an object identifier for each, and starts the extraction.
+  3. For each file, the interface shows the identified format, any errors and warnings, and the output of each tool. Several files are processed as an asynchronous batch when the service allows it.
+  4. The researcher can choose to extract other files.
 - **Alternative flows:** an empty file or a file that is too large is rejected with a clear message, and no tool runs (see R5).
 - **Outcome:** the researcher can read the raw output of every tool that ran.
 - **Requirements:** MES-REQ-2-004, MES-REQ-2-006, MES-REQ-3-001.
@@ -139,9 +139,9 @@ flowchart LR
 - **Goal:** select the right tools when the format is already known, or understand how the service chose them.
 - **Main flow:**
   1. The researcher adds the format to the request, as a PRONOM identifier (PUID) or a MIME type.
-  2. The service maps that format to the configured tools.
+  2. The service maps the PUID, or the file extension, to the configured tools with its local format rules. A MIME type is accepted and recorded, but no rule matches on it yet (see "Not yet supported").
   3. The result states which format was used, which tools were chosen, and how the choice was made: from the researcher's hint, from automatic identification, or from the default.
-- **Alternative flows:** without a hint, the service asks the File Format Identification Service (FFIS) to identify the file. If identification is switched off, unavailable or inconclusive, the service uses the default tools and adds a warning that explains why.
+- **Alternative flows:** without a hint, the service asks the File Format Identification Service (FFIS) to identify the file. If identification is switched off, unavailable or inconclusive, a local rule can still match on the file extension; otherwise the service uses the default tool. A warning explains why when identification was unreachable or inconclusive.
 - **Outcome:** the researcher can tell whether the tools were chosen from their hint, from identification, or from the default.
 - **Requirements:** MES-REQ-1-001, MES-REQ-1-004, MES-REQ-2-006 (second occurrence, "PUID or mime type"), MES-REQ-3-010.
 
@@ -152,7 +152,7 @@ flowchart LR
   1. The researcher checks whether each tool succeeded, failed or ran out of time.
   2. The researcher reads the errors and warnings of each tool and of the request as a whole.
   3. The researcher uses the output of the tools that succeeded. A failing tool does not discard the other tools' results, unless that tool is configured as mandatory. In that case the request as a whole reports an error.
-- **Alternative flows:** a request can also be refused as a whole. This happens when the file is missing or empty, when the format hint is invalid, when the file is larger than the maximum size, when a required tool is not configured, or when something unexpected goes wrong. In every case the researcher gets a readable message and a reference number. No internal details are shown.
+- **Alternative flows:** a request can also be refused as a whole. This happens when the file is missing or empty, when the format hint is invalid, when the file is larger than the maximum size, when a required tool is not configured, when the request asks for XML in a form the service does not offer (only the PREMIS document, `application/premis+xml`, is offered), or when something unexpected goes wrong. In every case the researcher gets a readable message and a reference number. No internal details are shown.
 - **Outcome:** the researcher knows which tools produced usable metadata and can quote the reference number when asking for help.
 - **Requirements:** MES-REQ-3-006, MES-REQ-3-008, MES-REQ-5-001.
 

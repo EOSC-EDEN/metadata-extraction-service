@@ -31,9 +31,7 @@ class ExtractViewTests(TestCase):
         body = response.json()
         self.assertEqual(body["filename"], "photo.jpg")
         self.assertEqual(body["tool_resolution"]["mime_type"], "image/jpeg")
-        self.assertEqual(
-            body["tool_resolution"]["selection_method"], "default_tool_caller_identified"
-        )
+        self.assertEqual(body["tool_resolution"]["selection_method"], "default_tool_caller_identified")
         self.assertEqual(body["results"][0]["tool"], "exiftool")
         self.assertEqual(body["results"][0]["status"], "success")
         self.assertEqual(body["results"][0]["raw_output"], '[{"a": 1}]')

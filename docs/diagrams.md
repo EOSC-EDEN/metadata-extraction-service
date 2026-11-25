@@ -3,7 +3,7 @@
 These diagrams show how a request flows through MES and how the **tool adapters** are invoked.
 
 {{ MES-REQ-1-005 }} requires the wrapper to invoke each configured extraction tool either as a
-**local CLI subprocess** (ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac) or as an
+**local CLI subprocess** (ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac, JHOVE, veraPDF, File Scraper) or as an
 **externally hosted HTTP service** (Apache Tika). Both integration paths sit behind the same adapter
 abstraction, so adding a tool never requires changes to the orchestrator (Requirement Group 4,
 {{ MES-REQ-4-007 }}).
@@ -47,7 +47,11 @@ sequenceDiagram
     participant Pool as ThreadPoolExecutor
     participant Adapter as Tool adapter (one per tool)
 
-    Client->>API: POST /api/v1/extract/ (file, puid?, mime_type?, format names?, object identifier?)
+    Client->>API: POST /api/v1/extract/ (file, puid?, mime_type?, object identifier?)
+    API->>API: negotiate the response format, before anything else is read
+    alt Accept asks for a form MES does not offer (application/xml, text/xml)
+        API-->>Client: 406 Not Acceptable (JSON error), nothing is extracted
+    end
     API->>API: check declared length, validate request
     alt too large or invalid
         API-->>Client: 413 or 400 error response (always JSON)
@@ -87,10 +91,8 @@ sequenceDiagram
     Orch->>Orch: log every error and warning with the request_id
     Orch-->>API: AggregatedExtractionResult
     API->>API: record metrics, serialize result, build the PREMIS object, events (format identification when FFIS was called, one per tool, summary) and agents
-    alt Accept: application/xml or text/xml
-        API-->>Client: 406 Not Acceptable (JSON error)
-    else Accept: application/premis+xml
-        API-->>Client: 200 OK, the PREMIS document (raw output embedded in the tool events)
+    alt Accept: application/premis+xml
+        API-->>Client: 200 OK, the PREMIS document (raw output embedded in the tool events; ?raw=exact adds the unmodified text)
     else
         API-->>Client: 200 OK, JSON (default)
     end
@@ -180,7 +182,7 @@ sequenceDiagram
     participant Worker as worker thread
     participant Orch as ExtractionOrchestrator
 
-    Client->>API: POST /api/v1/jobs/ (file, puid?, mime_type?)
+    Client->>API: POST /api/v1/jobs/ (file, puid?, mime_type?, object identifier?)
     API->>API: check declared length, validate request, save_upload to a work dir
     API->>Jobs: submit(file_path, work_dir, ...)
     Jobs->>Jobs: purge_expired()
@@ -221,6 +223,9 @@ sequenceDiagram
 
 A finished job's data is kept for `MES_JOB_TTL_SECONDS`; expired jobs and their uploads are purged on
 access and on submit.
+
+The job envelopes (submit, status) are JSON only: a request for XML gets `406`. Only `GET /jobs/{job_id}/result/`
+can return the PREMIS document (`Accept: application/premis+xml`; add `?raw=exact` for the unmodified output).
 
 ## Sequence diagram — asynchronous batch (`POST /api/v1/jobs/batch/`)
 
@@ -264,9 +269,9 @@ sequenceDiagram
         alt unknown or expired
             API-->>Client: 404
         else
-            API-->>Client: 200 batch envelope (each file's job_id and current status)
+            API-->>Client: 200 batch envelope, JSON (each file's job_id and current status)
         end
     end
 ```
 
-Each job in a batch is kept for `MES_JOB_TTL_SECONDS` like any other job.
+Each job in a batch is kept for `MES_JOB_TTL_SECONDS` like any other job. The batch envelope is JSON only, like the job envelope; each file's result is fetched per job, as JSON or as the PREMIS document.

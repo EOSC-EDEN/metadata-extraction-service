@@ -33,7 +33,6 @@ from apps.api.serializers import (
     ExtractionRequestSerializer,
     PayloadTooLarge,
     check_declared_length,
-    format_names,
     serialize_extraction_result,
     serialize_job,
     serialize_job_batch,
@@ -111,7 +110,6 @@ class ExtractMetadataView(RequestIdMixin, APIView):
                     upload.name,
                     object_identifier=data.get("object_identifier") or None,
                     object_identifier_type=data.get("object_identifier_type") or None,
-                    format_names=format_names(data),
                     file_fixity=fixity,
                 )
             )
@@ -158,7 +156,6 @@ class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
                 mime_type=data.get("mime_type") or None,
                 object_identifier=data.get("object_identifier") or None,
                 object_identifier_type=data.get("object_identifier_type") or None,
-                format_names=format_names(data),
                 request_id=request.mes_request_id,
                 size_bytes=upload.size,
             )

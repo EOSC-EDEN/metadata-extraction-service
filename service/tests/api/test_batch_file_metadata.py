@@ -17,18 +17,12 @@ def _link(result):
     return link["objectIdentifierType"], link["objectIdentifierValue"]
 
 
-def _designations(result):
-    formats = result["provenance"]["object"]["objectCharacteristics"][0]["format"]
-    return [f.get("formatDesignation") for f in formats]
-
-
 def _characteristics(result):
     return result["provenance"]["object"]["objectCharacteristics"][0]
 
 
 def _resolution(result):
-    resolution = result["tool_resolution"]
-    return resolution["puid"], resolution["mime_type"]
+    return result["tool_resolution"]["puid"]
 
 
 class FileMetadataCases:
@@ -51,17 +45,19 @@ class FileMetadataCases:
         )
 
         a, b = self.results(response)
-        self.assertEqual(_resolution(a), ("fmt/43", "image/jpeg"))
-        self.assertEqual(_resolution(b), (None, "image/jpeg"))
+        self.assertEqual((_resolution(a), _resolution(b)), ("fmt/43", None))
 
-    def test_a_per_file_value_overrides_the_request_level_default(self, run):
+    def test_a_per_file_mime_type_overrides_the_request_level_default(self, run):
         response = self.submit(
             [_upload(name="a.jpg"), _upload(name="b.pdf"), _upload(name="c.jpg")],
             {"b.pdf": {"mime_type": "application/pdf"}},
+            mime_type="image/jpeg",
         )
 
         a, b, c = self.results(response)
-        self.assertEqual([_resolution(r)[1] for r in (a, b, c)], ["image/jpeg", "application/pdf", "image/jpeg"])
+        self.assertEqual(
+            [r["tool_resolution"]["mime_type"] for r in (a, b, c)], ["image/jpeg", "application/pdf", "image/jpeg"]
+        )
 
     def test_the_request_level_puid_stays_the_default_for_other_files(self, run):
         response = self.submit(
@@ -69,13 +65,13 @@ class FileMetadataCases:
         )
 
         a, b = self.results(response)
-        self.assertEqual([_resolution(r)[0] for r in (a, b)], ["fmt/18", "fmt/43"])
+        self.assertEqual([_resolution(r) for r in (a, b)], ["fmt/18", "fmt/43"])
 
     def test_a_blank_per_file_value_falls_back_to_the_default(self, run):
         response = self.submit([_upload(name="a.jpg")], {"a.jpg": {"puid": ""}}, puid="fmt/43")
 
         (a,) = self.results(response)
-        self.assertEqual(_resolution(a)[0], "fmt/43")
+        self.assertEqual(_resolution(a), "fmt/43")
 
     def test_the_event_links_the_object_identifier_of_that_file_only(self, run):
         response = self.submit(
@@ -95,8 +91,8 @@ class FileMetadataCases:
 
         a, b = self.results(response)
         rb, ra = self.results(reversed_response)
-        self.assertEqual((_resolution(a)[0], _resolution(b)[0]), ("fmt/43", "fmt/18"))
-        self.assertEqual((_resolution(ra)[0], _resolution(rb)[0]), ("fmt/43", "fmt/18"))
+        self.assertEqual((_resolution(a), _resolution(b)), ("fmt/43", "fmt/18"))
+        self.assertEqual((_resolution(ra), _resolution(rb)), ("fmt/43", "fmt/18"))
 
     def test_null_and_empty_entries_mean_nothing_for_that_file(self, run):
         response = self.submit([_upload(name="a.jpg"), _upload(name="b.jpg")], {"a.jpg": None, "b.jpg": {}})
@@ -108,29 +104,6 @@ class FileMetadataCases:
             with self.subTest(manifest=manifest):
                 response = self.submit([_upload()], manifest)
                 self.assertEqual(response.status_code, self.ok_status)
-
-    def test_format_names_follow_the_same_default_and_override_rules(self, run):
-        response = self.submit(
-            [_upload(name="a.jpg"), _upload(name="b.jpg"), _upload(name="c.jpg")],
-            {"b.jpg": {"format_name": "Own name", "media_type_name": "own"}, "c.jpg": None},
-            puid="fmt/43",
-            format_name="Shared name",
-            format_version="1.01",
-        )
-
-        a, b, c = self.results(response)
-        self.assertEqual(_designations(a), [{"formatName": "Shared name", "formatVersion": "1.01"}, None])
-        # the file's own name replaces the shared one; the shared version still serves it
-        self.assertEqual(
-            _designations(b), [{"formatName": "Own name", "formatVersion": "1.01"}, {"formatName": "own"}]
-        )
-        self.assertEqual(_designations(c), _designations(a))
-
-    def test_an_overlong_per_file_format_name_is_rejected(self, run):
-        for field, length in (("format_name", 256), ("format_version", 65), ("media_type_name", 256)):
-            response = self.submit([_upload(name="a.jpg")], {"a.jpg": {field: "x" * length}})
-            self.assertRejected(response, "a.jpg", field)
-        self.assertNothingStarted(run)
 
     def test_each_object_has_the_size_and_sha256_of_its_own_file(self, run):
         response = self.submit([_upload(b"one", "a.jpg"), _upload(b"x", "b.jpg"), _upload(b"twelve bytes", "c.jpg")])
@@ -148,7 +121,7 @@ class FileMetadataCases:
         response = self.submit([_upload(name="a.jpg")], puid="fmt/43")
 
         (a,) = self.results(response)
-        self.assertEqual(_resolution(a), ("fmt/43", "image/jpeg"))
+        self.assertEqual(_resolution(a), "fmt/43")
         self.assertEqual(_link(a), ("filepath", "a.jpg"))
 
     def test_duplicate_filenames_without_an_entry_are_still_accepted(self, run):
@@ -254,7 +227,6 @@ class AsyncFileMetadataTests(FileMetadataCases, async_tests.BatchJobsTestCase):
             {
                 "file": _upload(name="a.jpg"),
                 "puid": "fmt/43",
-                "mime_type": "image/jpeg",
                 "object_identifier": UUID,
                 "object_identifier_type": "UUID",
             },

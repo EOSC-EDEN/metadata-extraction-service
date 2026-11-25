@@ -42,7 +42,6 @@ def _submit(service, **overrides):
         work_dir=directory,
         filename="a.bin",
         puid=None,
-        mime_type=None,
         request_id="req-1",
         size_bytes=1,
     )

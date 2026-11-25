@@ -60,8 +60,7 @@ _UNEXPECTED_ERROR = "An unexpected error occurred while processing the job."
 
 
 def _extract_and_serialize(
-    *, file_path, filename, puid, mime_type, object_identifier, object_identifier_type, request_id,
-    format_names=None,
+    *, file_path, filename, puid, object_identifier, object_identifier_type, request_id, mime_type=None,
 ) -> dict:
     result = ExtractionOrchestrator().extract(
         file_path, puid=puid, mime_type=mime_type, request_id=request_id, filename=filename
@@ -73,7 +72,6 @@ def _extract_and_serialize(
         filename,
         object_identifier=object_identifier,
         object_identifier_type=object_identifier_type,
-        format_names=format_names,
         file_fixity=premis.file_fixity(file_path),
     )
 
@@ -112,12 +110,11 @@ class JobService:
         work_dir,
         filename,
         puid,
-        mime_type,
         request_id,
         size_bytes,
+        mime_type=None,
         object_identifier=None,
         object_identifier_type=None,
-        format_names=None,
     ) -> JobRecord:
         """Queue a job. The caller owns `work_dir` until this returns; afterwards the job does
         (it is removed when the job finishes). Raises `JobStoreFull` when at capacity."""
@@ -143,7 +140,6 @@ class JobService:
                 request_id,
                 object_identifier,
                 object_identifier_type,
-                format_names,
             )
         except Exception:
             self._finish(record.job_id, JobStatus.FAILED, errors=[_UNEXPECTED_ERROR])
@@ -155,9 +151,9 @@ class JobService:
     ) -> tuple[BatchRecord, list[JobRecord]]:
         """Queue one job per item (`file_path`, `work_dir`, `filename`, `size_bytes`), all or none.
 
-        An item may also carry its own `puid`, `mime_type`, `object_identifier` and
-        `object_identifier_type` (and `format_names`); a `puid` or `mime_type` key (even `None`) replaces the shared
-        argument of the same name, which only serves items that have none.
+        An item may also carry its own `puid`, `mime_type`, `object_identifier` and `object_identifier_type`; a
+        `puid` or `mime_type` key (even `None`) replaces the shared argument of the same name, which only
+        serves items that have none.
 
         Raises `JobStoreFull`, with no job created, unless the store has room for every item; the
         caller then still owns every `work_dir`. Otherwise each job owns its `work_dir` from here on.
@@ -204,7 +200,6 @@ class JobService:
                     record.request_id,
                     item.get("object_identifier"),
                     item.get("object_identifier_type"),
-                    item.get("format_names"),
                 )
             except Exception:
                 logger.exception("batch %s: could not queue job %s", batch.batch_id, record.job_id)
@@ -283,7 +278,6 @@ class JobService:
         request_id,
         object_identifier=None,
         object_identifier_type=None,
-        format_names=None,
     ):
         extra = {"request_id": request_id}
         record = self._store.get(job_id)
@@ -304,7 +298,6 @@ class JobService:
                 mime_type=mime_type,
                 object_identifier=object_identifier,
                 object_identifier_type=object_identifier_type,
-                format_names=format_names,
                 request_id=request_id,
             )
         except ToolNotConfigured as exc:

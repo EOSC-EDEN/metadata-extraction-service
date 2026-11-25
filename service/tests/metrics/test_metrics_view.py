@@ -51,7 +51,7 @@ class JobsWaitingAtScrapeTests(TestCase):
         directory = tempfile.mkdtemp()
         return service.submit(
             file_path=os.path.join(directory, "u"), work_dir=directory, filename="a", puid=None,
-            mime_type=None, request_id="r", size_bytes=size,
+            request_id="r", size_bytes=size,
         )
 
     def test_reports_the_jobs_waiting_right_now(self):

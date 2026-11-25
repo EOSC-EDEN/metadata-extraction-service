@@ -50,7 +50,7 @@ class BatchJobsTestCase(test_jobs_view.JobsViewTestCase):
         self.addCleanup(override.disable)
 
     def submit_batch(self, files, **fields):
-        data = {"files": files, "mime_type": "image/jpeg", **fields}
+        data = {"files": files, **fields}
         return self.client.post(SUBMIT, data, format="multipart")
 
     def batch_status(self, batch_id, **extra):
@@ -84,7 +84,7 @@ class SubmitBatchTests(BatchJobsTestCase):
             async_result = self.client.get(f"/api/v1/jobs/{job_id}/result/").json()
             sync = self.client.post(
                 "/api/v1/extract/",
-                {"file": _upload(name=entry["filename"]), "mime_type": "image/jpeg"},
+                {"file": _upload(name=entry["filename"])},
                 format="multipart",
             ).json()
             self.assertEqual(_stable(async_result), _stable(sync))
@@ -98,7 +98,7 @@ class SubmitBatchTests(BatchJobsTestCase):
         self.assertEqual(ids, [f"{prefix}-0", f"{prefix}-1"])
 
     def test_puid_and_mime_type_apply_to_every_file(self, run):
-        body = self.submit_batch([_upload(), _upload()], puid="fmt/43").json()
+        body = self.submit_batch([_upload(), _upload()], puid="fmt/43", mime_type="image/jpeg").json()
 
         for entry in body["jobs"]:
             resolution = self.client.get(f"/api/v1/jobs/{entry['job_id']}/result/").json()["tool_resolution"]
@@ -283,7 +283,7 @@ class BatchValidationTests(BatchJobsTestCase):
         self.assertEqual(self.executor.pending if hasattr(self.executor, "pending") else [], [])
 
     def test_no_files_is_400(self, run):
-        self.assertRejected(self.client.post(SUBMIT, {"mime_type": "image/jpeg"}, format="multipart"), 400)
+        self.assertRejected(self.client.post(SUBMIT, {}, format="multipart"), 400)
 
     @override_settings(MES_MAX_FILES_PER_REQUEST=3)
     def test_file_count_boundary(self, run):

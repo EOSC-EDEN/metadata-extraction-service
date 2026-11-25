@@ -68,7 +68,7 @@ class SubmitBatchTests(SimpleTestCase):
     def test_one_job_per_file_in_upload_order(self):
         service, _ = _service()
         batch, jobs = service.submit_batch(
-            [_item("c.bin"), _item("a.bin"), _item("b.bin")], puid=None, mime_type=None, request_id="req"
+            [_item("c.bin"), _item("a.bin"), _item("b.bin")], puid=None, request_id="req"
         )
 
         self.assertEqual([j["index"] for j in batch.jobs], [0, 1, 2])
@@ -93,7 +93,7 @@ class SubmitBatchTests(SimpleTestCase):
     def test_get_batch_returns_the_current_job_states(self):
         executor = DeferredExecutor()
         service, _ = _service(executor=executor)
-        batch, _ = service.submit_batch([_item(), _item()], puid=None, mime_type=None, request_id="r")
+        batch, _ = service.submit_batch([_item(), _item()], puid=None, request_id="r")
 
         _, jobs = service.get_batch(batch.batch_id)
         self.assertEqual([j.status for j in jobs], [JobStatus.PENDING] * 2)
@@ -110,7 +110,7 @@ class SubmitBatchTests(SimpleTestCase):
 
         service, _ = _service(extract=extract)
         batch, _ = service.submit_batch(
-            [_item("a.bin"), _item("bad.bin"), _item("c.bin")], puid=None, mime_type=None, request_id="r"
+            [_item("a.bin"), _item("bad.bin"), _item("c.bin")], puid=None, request_id="r"
         )
 
         _, jobs = service.get_batch(batch.batch_id)
@@ -127,7 +127,7 @@ class SubmitBatchTests(SimpleTestCase):
     def test_room_for_exactly_n_jobs_is_accepted(self):
         service, _ = _service(max_jobs=3, executor=DeferredExecutor())
         batch, jobs = service.submit_batch(
-            [_item(), _item(), _item()], puid=None, mime_type=None, request_id="r"
+            [_item(), _item(), _item()], puid=None, request_id="r"
         )
         self.assertEqual(len(jobs), 3)
 
@@ -135,7 +135,7 @@ class SubmitBatchTests(SimpleTestCase):
         executor = DeferredExecutor()
         service, _ = _service(max_jobs=2, executor=executor)
         with self.assertRaises(JobStoreFull):
-            service.submit_batch([_item(), _item(), _item()], puid=None, mime_type=None, request_id="r")
+            service.submit_batch([_item(), _item(), _item()], puid=None, request_id="r")
 
         self.assertEqual(executor.pending, [])
         self.assertEqual(service.live_work_dirs(), set())
@@ -154,7 +154,7 @@ class SubmitBatchTests(SimpleTestCase):
         items = [_item(), _item(), _item()]
         self.addCleanup(lambda: [shutil.rmtree(i["work_dir"], ignore_errors=True) for i in items])
 
-        batch, jobs = service.submit_batch(items, puid=None, mime_type=None, request_id="r")
+        batch, jobs = service.submit_batch(items, puid=None, request_id="r")
 
         executor.run_all()
         _, current = service.get_batch(batch.batch_id)
@@ -175,7 +175,7 @@ class BatchExpiryTests(SimpleTestCase):
     def submit_two(self, executor=None):
         executor = executor or DeferredExecutor()
         service, clock = _service(executor=executor)
-        batch, jobs = service.submit_batch([_item(), _item()], puid=None, mime_type=None, request_id="r")
+        batch, jobs = service.submit_batch([_item(), _item()], puid=None, request_id="r")
         return service, clock, executor, batch, jobs
 
     def assertWholeBatchPresent(self, service, batch, jobs):
@@ -243,9 +243,9 @@ class BatchExpiryTests(SimpleTestCase):
         directory = _item()
         record = service.submit(
             file_path=directory["file_path"], work_dir=directory["work_dir"], filename="a",
-            puid=None, mime_type=None, request_id="r", size_bytes=1,
+            puid=None, request_id="r", size_bytes=1,
         )
-        batch, jobs = service.submit_batch([_item()], puid=None, mime_type=None, request_id="r")
+        batch, jobs = service.submit_batch([_item()], puid=None, request_id="r")
         clock.advance(TTL)
 
         self.assertIsNone(service.get(record.job_id))

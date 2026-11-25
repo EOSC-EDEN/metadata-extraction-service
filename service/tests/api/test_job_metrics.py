@@ -42,7 +42,6 @@ def _submit(service, size_bytes):
         work_dir=directory,
         filename="a.bin",
         puid=None,
-        mime_type=None,
         request_id="r",
         size_bytes=size_bytes,
     )

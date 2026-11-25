@@ -46,7 +46,7 @@ class ResultRoutesTests(test_jobs_view.JobsViewTestCase):
         with _ok():
             job_id = self.submit().json()["job_id"]
         return {
-            "extract": lambda **kw: self.client.post("/api/v1/extract/", {"file": _file(), "mime_type": "image/jpeg"}, format="multipart", **kw),
+            "extract": lambda **kw: self.client.post("/api/v1/extract/", {"file": _file()}, format="multipart", **kw),
             "job result": lambda **kw: self.client.get(f"/api/v1/jobs/{job_id}/result/", **kw),
         }
 
@@ -131,7 +131,7 @@ class RawOutputElementTests(TestCase):
         with mock.patch("apps.extraction.adapters.base.subprocess.run", **outcome):
             response = APIClient().post(
                 "/api/v1/extract/?" + "&".join(f"{k}={v}" for k, v in query.items()),
-                {"file": _file(), "mime_type": "image/jpeg"},
+                {"file": _file()},
                 format="multipart",
                 HTTP_ACCEPT=PREMIS,
             )
@@ -158,7 +158,7 @@ class RawOutputElementTests(TestCase):
 
     def test_the_document_does_not_declare_the_mes_namespace_any_more(self):
         response = APIClient().post(
-            "/api/v1/extract/", {"file": _file(), "mime_type": "image/jpeg"}, format="multipart", HTTP_ACCEPT=PREMIS
+            "/api/v1/extract/", {"file": _file()}, format="multipart", HTTP_ACCEPT=PREMIS
         )
         self.assertNotIn(b"urn:eden:mes:result:1", response.content)
         self.assertNotIn(b"xmlns:mes", response.content)
