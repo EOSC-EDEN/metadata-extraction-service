@@ -1,6 +1,10 @@
 # Enable optional tools
 
-ExifTool and MediaInfo are installed and enabled by default; set `MES_EXIFTOOL_ENABLED=false` or `MES_MEDIAINFO_ENABLED=false` to disable one. Keep the tool named by `MES_DEFAULT_TOOL` (ExifTool by default) enabled, or change `MES_DEFAULT_TOOL` first. The other tools are opt-in: enabling one with its environment variable also installs it in the image, so there is no separate install setting.
+ExifTool and MediaInfo are installed and enabled by default. You can set `MES_EXIFTOOL_ENABLED=false` or `MES_MEDIAINFO_ENABLED=false` to disable one or the other.
+
+You should keep the tool named by `MES_DEFAULT_TOOL` (ExifTool by default) enabled. Change `MES_DEFAULT_TOOL` if you wish to set a different tool as the default.
+
+The other tools are opt-in: enabling one with its environment variable also installs it in the image, so there is no separate installation step.
 
 | Tool | Enable with | Notes |
 |---|---|---|

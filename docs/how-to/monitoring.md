@@ -29,7 +29,9 @@ scrape_configs:
 
 ## Notes
 
-- Asynchronous jobs are counted in `mes_extract_requests_total` (and the duration histogram) once a worker has run them, never while they wait or if they expire first. Each file of a batch counts as one request.
-- `mes_jobs_waiting` and `mes_jobs_waiting_bytes` are read from the job store once per scrape, so they are true totals with any number of workers (with Redis they cover all workers). If the job store cannot be read, these two are left out of that scrape.
-- Prometheus uses base units. For MB, use `mes_jobs_waiting_bytes / 1e6`. Accumulated GB uploaded per day: `increase(mes_uploaded_bytes_total[1d]) / 1e9`.
+- Asynchronous jobs are counted in `mes_extract_requests_total` (and the duration histogram) once a worker has run them (never while they wait, or if they expire first). Each file of a batch counts as one request.
+- `mes_jobs_waiting` and `mes_jobs_waiting_bytes` are read from the job store once per scrape, so they are true totals with any number of workers (with Redis they cover all workers). If the job store cannot be read, those totals are left out of that scrape.
+- Prometheus uses base units.
+    - For MB, use `mes_jobs_waiting_bytes / 1e6`.
+    - For accumulated GB uploaded per day, use `increase(mes_uploaded_bytes_total[1d]) / 1e9`.
 - In the container, gunicorn workers share metrics through `PROMETHEUS_MULTIPROC_DIR`.

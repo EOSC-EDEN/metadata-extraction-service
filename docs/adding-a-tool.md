@@ -96,11 +96,17 @@ class TikaAdapter(HTTPToolAdapter):
         }
 ```
 
-For HTTP tools the required `invocation_command` setting holds the **base URL** (for example `http://tika:9998`) and is available as `self.base_url`. `extra_args` is not passed to HTTP adapters. Timeouts map to `timeout`; connection errors and non-2xx responses map to `failure`.
+For HTTP tools the required `invocation_command` setting holds the **base URL** (for example `http://tika:9998`) and is available as `self.base_url`.
 
-### Tools that need something else
+`extra_args` is not passed to HTTP adapters.
 
-If a tool is neither a CLI nor an HTTP service, subclass `BaseToolAdapter` and implement `invoke(file_path) -> (raw_output, raw_output_format)`. You may raise from `invoke()`; list the exception types in `timeout_exceptions` and `failure_exceptions` so `run()` can map them to a status. Note that the orchestrator only constructs `SubprocessToolAdapter` and `HTTPToolAdapter` subclasses with their config arguments (`HTTPToolAdapter` subclasses get `base_url`, everything else gets `invocation_command`, `extra_args` and `timeout_seconds`), so a custom base class must accept those keyword arguments.
+Timeouts map to `timeout`; connection errors and non-2xx responses map to `failure`.
+
+### Tools that require additional steps
+
+If a tool is neither a CLI nor an HTTP service, subclass `BaseToolAdapter` and implement `invoke(file_path) -> (raw_output, raw_output_format)`. You may raise from `invoke()`; list the exception types in `timeout_exceptions` and `failure_exceptions` so `run()` can map them to a status.
+
+Note that the orchestrator only constructs `SubprocessToolAdapter` and `HTTPToolAdapter` subclasses with their config arguments (`HTTPToolAdapter` subclasses get `base_url`, everything else gets `invocation_command`, `extra_args` and `timeout_seconds`), so a custom base class must accept those keyword arguments.
 
 ## Step 2: Register the tool in `MES_TOOLS`
 
@@ -137,11 +143,17 @@ MES_TOOLS = {
 | `display_name` | no | the `MES_TOOLS` key | Human-readable name used as the PREMIS `agentName` in `provenance.agents`. Must be a non-empty string when set. |
 | `mandatory` | no | `False` | If `True`, a failure or timeout of this tool is reported as a top-level error (MES-REQ-3-006). If `False`, it is reported as a warning and the other tools' results are still returned. |
 
-The dictionary key (`"ffprobe"` above) is the tool's name everywhere: in the `tools` listing, in result output, and when selecting the default tool.
+The dictionary key (`"ffprobe"` above) is the tool's name everywhere:
 
-### Making it the default tool
+- in the `tools` listing
+- in result output
+- and when selecting the default tool.
 
-Which tools run is decided by [local format rules](how-to/local-format-rules.md): the tools named by the matching rules run, and the **default tool** (MES-REQ-1-001) is the fallback that runs alone when no rule matches. Mapping file formats to tools through the File Format Library is not implemented. To select your tool for a format, add it to a rule. To make it the fallback default instead, set the `MES_DEFAULT_TOOL` environment variable to its key:
+### Set the added tool as default
+
+Which tools run is decided by [local format rules](how-to/local-format-rules.md): the tools named by the matching rules run, and the **default tool** (MES-REQ-1-001) is the fallback that runs alone when no rule matches. Mapping file formats to tools through the File Format Library is not implemented.
+
+To select your tool for a format, add it to a rule. To make it the fallback default instead, set the `MES_DEFAULT_TOOL` environment variable to its key:
 
 ```bash
 MES_DEFAULT_TOOL=ffprobe
@@ -155,11 +167,11 @@ The service only calls the binary; it does not install it.
 
 - **Local development:** install the tool with your package manager and make sure it is on `PATH` (or set the `invocation_command` to an absolute path).
 - **Docker:** the `Dockerfile` installs tools via `INSTALL_<TOOL>` build arguments. FFprobe (package `ffmpeg`) and ImageMagick already have switches. For a tool without one:
-  1. Add `ARG INSTALL_MYTOOL=false` to the `Dockerfile`.
-  2. Add a line to the package list, for example `[ "$INSTALL_MYTOOL" = "true" ] && packages="$packages <apt-package>"`.
-  3. Pass the argument through in `docker-compose.yml` under `build.args`, and add it to `.env.example`.
+    1. Add `ARG INSTALL_MYTOOL=false` to the `Dockerfile`.
+    2. Add a line to the package list, for example `[ "$INSTALL_MYTOOL" = "true" ] && packages="$packages <apt-package>"`.
+    3. Pass the argument through in `docker-compose.yml` under `build.args`, and add it to `.env.example`.
 
-  Tools that are not in Debian's repositories (or that are Java services like Tika) need their own install steps, or should run as a separate container used through an `http` adapter.
+    Tools that are not in Debian's repositories (or that are Java services like Tika) need their own install steps, or should run as a separate container used through an `http` adapter.
 - **Overriding the binary path:** if you read the command from an environment variable, as the built-in tools do (`MES_EXIFTOOL_COMMAND`, `MES_MEDIAINFO_COMMAND`), add that variable to `docker-compose.yml` as well if you want to set it there.
 
 ## Step 4: Add tests
@@ -217,18 +229,19 @@ python manage.py test
 1. Start the service (`python manage.py runserver`, or `docker compose up --build`). A bad entry or unimportable adapter stops startup with an `ImproperlyConfigured` message naming the offending key.
 2. Check that the tool is listed:
 
-   ```bash
-   curl http://localhost:8000/api/v1/tools/
-   ```
+    ```bash
+    curl http://localhost:8000/api/v1/tools/
+    ```
 
-   The response shows name, kind, enabled, mandatory, default and timeout. Invocation details are deliberately not exposed.
+    The response shows name, kind, enabled, mandatory, default and timeout. Invocation details are deliberately not exposed.
+
 3. If the tool is the default (or selected by a local rule for your file), run an extraction:
 
-   ```bash
-   curl -F file=@sample.mp4 http://localhost:8000/api/v1/extract/
-   ```
+    ```bash
+    curl -F file=@sample.mp4 http://localhost:8000/api/v1/extract/
+    ```
 
-   The tool's raw output appears in the result together with its name, version, status and the command that was run.
+    The tool's raw output appears in the result together with its name, version, status and the command that was run.
 
 ## Gotchas
 
