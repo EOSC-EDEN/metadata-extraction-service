@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from django.test import TestCase, override_settings
 
 from apps.extraction.exceptions import FFISUnavailable, ToolNotConfigured
@@ -76,6 +78,32 @@ class ResolveToolsTests(TestCase):
         self.assertEqual(resolution.selection_method, "default_tool_ffis_unreachable")
         self.assertIn("ffis_unreachable", resolution.warnings[0])
         self.assertIn("down", resolution.warnings[0])
+
+    @override_settings(MES_FFIS_ENABLED=True)
+    def test_the_ffis_call_is_timed(self):
+        ffis = FakeFFISClient(FFISResolution("fmt/43", "image/jpeg", "ok", [], {"outcome": "ok"}))
+        before = datetime.now(timezone.utc)
+        resolution = resolve_tools("/f", ffis_client=ffis)
+        after = datetime.now(timezone.utc)
+        self.assertLessEqual(before, resolution.identification_started_at)
+        self.assertLessEqual(resolution.identification_started_at, resolution.identification_finished_at)
+        self.assertLessEqual(resolution.identification_finished_at, after)
+
+    @override_settings(MES_FFIS_ENABLED=True)
+    def test_the_time_is_recorded_when_ffis_is_unreachable_or_inconclusive(self):
+        for ffis in (FakeFFISClient(error=FFISUnavailable("down")), FakeFFISClient(None)):
+            with self.subTest(error=ffis.error):
+                resolution = resolve_tools("/f", ffis_client=ffis)
+                self.assertIsNotNone(resolution.identification_started_at)
+                self.assertLessEqual(resolution.identification_started_at, resolution.identification_finished_at)
+
+    @override_settings(MES_FFIS_ENABLED=False)
+    def test_no_time_when_ffis_was_not_called(self):
+        resolution = resolve_tools("/f", ffis_client=FakeFFISClient())
+        self.assertIsNone(resolution.identification_started_at)
+        self.assertIsNone(resolution.identification_finished_at)
+        caller = resolve_tools("/f", puid="fmt/43", ffis_client=FakeFFISClient())
+        self.assertIsNone(caller.identification_started_at)
 
     @override_settings(MES_FFIS_ENABLED=True, MES_DEFAULT_TOOL="")
     def test_no_default_tool_raises_before_calling_ffis(self):
@@ -244,6 +272,7 @@ class LocalRuleResolutionTests(TestCase):
         self.assertEqual(resolution.warnings, ["w"])
         self.assertEqual(resolution.ffis_provenance, {"outcome": "ok"})
         self.assertEqual(resolution.identification_url, "http://ffis.test")
+        self.assertIsNotNone(resolution.identification_started_at)  # kept when local rules take over
 
     def test_caller_puid_never_calls_ffis_even_with_rules(self):
         ffis = FakeFFISClient()
@@ -266,6 +295,15 @@ class LocalRuleResolutionTests(TestCase):
         resolution = self.resolve(
             "rules:\n- {name: a, extensions: [jpg], tools: [ffprobe]}\n",
             mime_type="image/jpeg",
+            filename="a.jpg",
+        )
+        self.assertEqual(resolution.selection_method, "local_rule")
+        self.assertEqual(resolution.mime_type, "image/jpeg")
+
+    def test_an_extension_rule_applies_even_when_the_callers_puid_matches_no_rule(self):
+        resolution = self.resolve(
+            "rules:\n- {name: a, extensions: [jpg], tools: [ffprobe]}\n",
+            puid="fmt/999",
             filename="a.jpg",
         )
         self.assertEqual(resolution.selection_method, "local_rule")

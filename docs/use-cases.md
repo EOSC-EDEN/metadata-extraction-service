@@ -108,9 +108,9 @@ flowchart LR
 - **Precondition:** the file is within the maximum size shown on the page.
 - **Main flow:**
   1. The researcher opens the web interface. It shows the maximum file size and the tools that are available.
-  2. The researcher drops or selects a file and starts the extraction.
-  3. The interface shows the identified format, any errors and warnings, and the output of each tool.
-  4. The researcher can choose to extract another file.
+  2. The researcher drops or selects one or more files, optionally fills in a format hint and an object identifier for each, and starts the extraction.
+  3. For each file, the interface shows the identified format, any errors and warnings, and the output of each tool. Several files are processed as an asynchronous batch when the service allows it.
+  4. The researcher can choose to extract other files.
 - **Alternative flows:** an empty file or a file that is too large is rejected with a clear message, and no tool runs (see R5).
 - **Outcome:** the researcher can read the raw output of every tool that ran.
 - **Requirements:** MES-REQ-2-004, MES-REQ-2-006, MES-REQ-3-001.
@@ -120,7 +120,7 @@ flowchart LR
 - **Goal:** get machine-readable output for one file.
 - **Main flow:**
   1. The researcher sends the file to the service in a single request.
-  2. The researcher chooses whether the answer comes back as JSON (the default) or XML.
+  2. The researcher chooses whether the answer comes back as JSON (the default) or as a PREMIS XML document.
   3. The answer contains one entry per tool, with the tool, its version, whether it succeeded, and its raw output.
 - **Outcome:** a result that follows the published schema (see C2).
 - **Requirements:** MES-REQ-2-001, MES-REQ-2-002, MES-REQ-2-005, MES-REQ-3-004, MES-REQ-3-007.
@@ -139,9 +139,9 @@ flowchart LR
 - **Goal:** select the right tools when the format is already known, or understand how the service chose them.
 - **Main flow:**
   1. The researcher adds the format to the request, as a PRONOM identifier (PUID) or a MIME type.
-  2. The service maps that format to the configured tools.
+  2. The service maps the PUID, or the file extension, to the configured tools with its local format rules. A MIME type is accepted and recorded, but no rule matches on it yet (see "Not yet supported").
   3. The result states which format was used, which tools were chosen, and how the choice was made: from the researcher's hint, from automatic identification, or from the default.
-- **Alternative flows:** without a hint, the service asks the File Format Identification Service (FFIS) to identify the file. If identification is switched off, unavailable or inconclusive, the service uses the default tools and adds a warning that explains why.
+- **Alternative flows:** without a hint, the service asks the File Format Identification Service (FFIS) to identify the file. If identification is switched off, unavailable or inconclusive, a local rule can still match on the file extension; otherwise the service uses the default tool. A warning explains why when identification was unreachable or inconclusive.
 - **Outcome:** the researcher can tell whether the tools were chosen from their hint, from identification, or from the default.
 - **Requirements:** MES-REQ-1-001, MES-REQ-1-004, MES-REQ-2-006 (second occurrence, "PUID or mime type"), MES-REQ-3-010.
 
@@ -152,7 +152,7 @@ flowchart LR
   1. The researcher checks whether each tool succeeded, failed or ran out of time.
   2. The researcher reads the errors and warnings of each tool and of the request as a whole.
   3. The researcher uses the output of the tools that succeeded. A failing tool does not discard the other tools' results, unless that tool is configured as mandatory. In that case the request as a whole reports an error.
-- **Alternative flows:** a request can also be refused as a whole. This happens when the file is missing or empty, when the format hint is invalid, when the file is larger than the maximum size, when a required tool is not configured, or when something unexpected goes wrong. In every case the researcher gets a readable message and a reference number. No internal details are shown.
+- **Alternative flows:** a request can also be refused as a whole. This happens when the file is missing or empty, when the format hint is invalid, when the file is larger than the maximum size, when a required tool is not configured, when the request asks for XML in a form the service does not offer (only the PREMIS document, `application/premis+xml`, is offered), or when something unexpected goes wrong. In every case the researcher gets a readable message and a reference number. No internal details are shown.
 - **Outcome:** the researcher knows which tools produced usable metadata and can quote the reference number when asking for help.
 - **Requirements:** MES-REQ-3-006, MES-REQ-3-008, MES-REQ-5-001.
 
@@ -191,7 +191,7 @@ flowchart LR
 - **Main flow:**
   1. The ingest workflow sends each file to the service, together with its format when format identification has already run.
   2. The workflow stores the raw output of each tool together with the tool, its version, the start and end time, and the output format.
-  3. The workflow also stores the provenance information of the result (when it was made, which service version, which tool versions, and which identification service was consulted) and the request's reference number.
+  3. The workflow also stores the provenance information of the result (when it was made, which service version, how the tools were selected and which identification service was consulted; the PREMIS events and agents hold the same) and the request's reference number.
 - **Outcome:** the stored metadata names the tool and version behind each element. Because the output is not modified, it can be re-interpreted later. This also supports significant properties recorded as technical metadata (QUALITY-TECHNICAL-REQ-016).
 - **Requirements:** MES-REQ-3-001, MES-REQ-3-002, MES-REQ-3-004, MES-REQ-3-007, MES-REQ-3-008.
 
@@ -199,7 +199,7 @@ flowchart LR
 
 - **Goal:** build or maintain an integration without guessing the structure of the result.
 - **Main flow:**
-  1. The curator or integrator downloads the service's published description: the API description, a schema for JSON results and a schema for XML results. An interactive page for trying out the API is also available.
+  1. The curator or integrator downloads the service's published description: the API description, a schema for JSON results, and for XML results the PREMIS 3 schema of the Library of Congress. An interactive page for trying out the API is also available.
   2. The integration checks each result against the schema before storing it.
 - **Outcome:** the top-level structure is stable and can be checked by machine, while the content of each tool's output stays specific to that tool.
 - **Requirements:** MES-REQ-2-001, MES-REQ-2-005.
@@ -357,12 +357,13 @@ F4 is drawn outside the system boundary because the curator does it in the Forma
 
 ## Not yet supported
 
-- Extraction from a whole SIP or AIP (MES-REQ-2-003, MES-REQ-1-003). The service accepts one file per request.
+- Extraction from a whole SIP or AIP (MES-REQ-2-003, MES-REQ-1-003). The service accepts single files, or several files as an asynchronous batch, not a package.
 - Tool selection from a Format Library (MES-REQ-1-002, MES-REQ-3-009), described in F1–F4. Format identification through FFIS is implemented, and operators can link PUIDs and file extensions to tools with local format rules. As a result the output does not state which Format Library selected the tools.
 - Tool selection by MIME type (MES-REQ-1-004, MES-REQ-2-007). The API accepts `mime_type` and `puid`, but local format rules match only on PUID and file extension. Without a matching rule, only the default tool runs whatever identifier was supplied.
 - Authentication (MES-REQ-1-006). The API is open; restrict access outside the service (for example in a gateway).
-- A complete PREMIS object characteristic (MES-REQ-2-009). The service returns the PREMIS event and agents only.
-- Labelling extracted metadata with its metadata type and standard (MES-REQ-3-005). Each result carries only its tool and raw output format (`json` or `text`).
+- A complete PREMIS object characteristic (MES-REQ-2-009). The service returns the PREMIS object (identifier, fixity, size and formats), the events and the agents, but does not put the tool output in `objectCharacteristicsExtension`: it stays in the tool events.
+- JSON-LD output (MES-REQ-2-011). The XML is a PREMIS 3 document valid against `premis.xsd`; the JSON mirrors it.
+- Labelling extracted metadata with its metadata type and standard (MES-REQ-3-005). Each result carries only its tool and raw output format (`json`, `xml` or `text`).
 - The Archivematica characterisation-command mode (MES-REQ-6-001 to MES-REQ-6-012). The service has no command-line mode that writes XML to standard output and signals failure through its exit status.
 
 Available but not on by default: ExifTool and MediaInfo are enabled by default. FFprobe, ImageMagick, File Scraper (MES-REQ-4-004) and Tika are implemented but must be switched on by the operator.

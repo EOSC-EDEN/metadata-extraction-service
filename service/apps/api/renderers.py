@@ -1,28 +1,31 @@
-"""XML renderer for the extraction result (MES-REQ-2-005).
+"""The XML form of an extraction result (MES-REQ-2-005): a standalone PREMIS 3 document.
 
-Renders the same dict the JSON renderer gets, so both formats stay in step.
-The element layout is defined by `schema/mes-result.xsd`. Null values are
-omitted. Strings that XML cannot carry (control characters) are emitted
-base64-encoded with `encoding="base64"`, so raw tool output is never altered.
+`PremisXMLRenderer` renders the PREMIS part of the result dict (`provenance`) as `premis:premis`
+(`application/premis+xml`; there is no other XML form, `application/xml` is answered with 406). The
+document follows the official PREMIS 3 schema (`xsi:schemaLocation` names it). Tool errors are plain `eventOutcomeDetailNote`s. The raw output
+of a tool is an element in the event's `eventOutcomeDetailExtension`: well-formed XML as itself, anything
+else as a `rawOutput` element without a namespace (the extension accepts any element, and is not
+validated further). Strings that XML cannot carry (control characters) are base64-encoded with
+`encoding="base64"` on that element, so raw tool output is never altered.
 """
 
 import base64
+import hashlib
+import io
 import re
+import uuid
+from xml.parsers import expat
 from xml.etree import ElementTree as ET
 
 from rest_framework.renderers import BaseRenderer
 
-NAMESPACE = "urn:eden:mes:result:1"
-JOB_NAMESPACE = "urn:eden:mes:job:1"
-BATCH_NAMESPACE = "urn:eden:mes:batch:1"
-JOB_BATCH_NAMESPACE = "urn:eden:mes:job-batch:1"
+from apps.api import premis
+
 PREMIS_NAMESPACE = "http://www.loc.gov/premis/v3"
+XSI_NAMESPACE = "http://www.w3.org/2001/XMLSchema-instance"
+XSI_TYPE = f"{{{XSI_NAMESPACE}}}type"
 
 _INVALID_XML_CHARS = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
-
-
-def _q(name):
-    return f"{{{NAMESPACE}}}{name}"
 
 
 def _premis(name):
@@ -46,209 +49,261 @@ def _premis_element(parent, name, value):
             _premis_element(element, key, member)
     else:
         element.text = _INVALID_XML_CHARS.sub("\ufffd", str(value))
+        for attribute, attribute_value in premis.vocabulary_attributes(name, str(value)).items():
+            element.set(attribute, attribute_value)
 
 
-def _set_text(element, value):
+#: Prefixes the embedded raw output must not take over from the document's own namespaces.
+_RESERVED_PREFIXES = {"", "xml", "xmlns", "xsi", "premis", "r", "mes"}
+_OWN_NAMESPACES = {PREMIS_NAMESPACE, XSI_NAMESPACE}
+
+
+def _parse_xml_fragment(text):
+    """The root element of well-formed XML `text`, or None. Foreign prefixes are kept for readable output.
+
+    A document that declares entities is refused (it would be expanded into the response); it is
+    then embedded as text, like any other output that is not XML.
+    """
+    if "<!ENTITY" in text:
+        return None
+    root = None
+    try:
+        for event, item in ET.iterparse(io.StringIO(text), events=("start-ns", "end")):
+            if event == "start-ns":
+                prefix, uri = item
+                if prefix not in _RESERVED_PREFIXES and uri not in _OWN_NAMESPACES:
+                    try:
+                        ET.register_namespace(prefix, uri)
+                    except ValueError:  # a prefix ElementTree reserves for generated names (ns0, ...)
+                        pass
+            else:
+                root = item
+    except (ET.ParseError, ValueError):
+        return None
+    return root
+
+
+def _xml_root_bytes(text):
+    """The root element of well-formed XML `text`, as UTF-8 bytes, or None.
+
+    The XML declaration, the doctype and comments around the root are dropped. The check is a
+    namespace-aware expat parse that builds no tree, which is far cheaper than ElementTree for large
+    reports. A root without a namespace gets `xmlns=""`, so it keeps no namespace when the output
+    document declares a default one. A document that declares entities is refused (see
+    `_parse_xml_fragment`).
+    """
+    if "<!ENTITY" in text:
+        return None
+    try:
+        data = text.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    scanned = _scan_root(data, precise=False)
+    if scanned is not None and scanned[1] is None:  # a comment or processing instruction follows the root
+        scanned = _scan_root(data, precise=True)
+    if scanned is None:
+        return None
+    start, end, default_ns = scanned
+    root = data[start:end].rstrip()
+    if not default_ns:
+        name_end = re.search(rb"[\s/>]", root).start()
+        if b":" not in root[:name_end]:
+            root = root[:name_end] + b' xmlns=""' + root[name_end:]
+    return root
+
+
+def _scan_root(data, *, precise):
+    """`(start, end, default_ns)` of the root element in `data` (UTF-8), or None when it is not well-formed.
+
+    The fast scan sees only the root's start, so it cannot tell where the root ends: `end` is the end of
+    the data, or None when a comment or processing instruction follows the root (the caller then scans
+    `precise`, which follows every element). `default_ns` says whether the root declares a default namespace.
+    """
+    parser = expat.ParserCreate("utf-8", " ")
+    state = {"depth": 0, "start": None, "end": None, "default_ns": False}
+
+    def declare(prefix, uri):
+        if state["depth"] == 0 and prefix is None:
+            state["default_ns"] = True
+
+    def start(name, attributes):
+        if state["depth"] == 0:
+            state["start"] = parser.CurrentByteIndex
+            if not precise:  # nothing else is needed: stop calling Python for every element
+                parser.StartElementHandler = None
+                parser.StartNamespaceDeclHandler = None
+        state["depth"] += 1
+
+    def end(name):
+        state["depth"] -= 1
+
+    def after_root(*args):
+        if state["depth"] == 0 and state["start"] is not None and state["end"] is None:
+            state["end"] = parser.CurrentByteIndex
+
+    parser.StartNamespaceDeclHandler = declare
+    parser.StartElementHandler = start
+    if precise:
+        parser.EndElementHandler = end
+        parser.CommentHandler = after_root
+        parser.ProcessingInstructionHandler = after_root
+    try:
+        parser.Parse(data, True)
+    except expat.ExpatError:
+        return None
+    if state["start"] is None:
+        return None
+    if not precise:
+        tail = data.rstrip()
+        # The end tag of the root ends in `>` after a name or `/`; a trailing comment or processing
+        # instruction ends in `-->` or `?>`.
+        if tail.endswith(b"-->") or tail.endswith(b"?>"):
+            return state["start"], None, state["default_ns"]
+        return state["start"], len(tail), state["default_ns"]
+    return state["start"], state["end"] if state["end"] is not None else len(data), state["default_ns"]
+
+
+def _embed_raw_output(event_element, result, *, exact_raw=False, fragments=None):
+    """Attach a tool's raw output to the `Output format: ...` detail of its event, as the XML itself.
+
+    Output that is not well-formed XML (JSON, text, a truncated report) becomes a `rawOutput`
+    element with the text, base64-encoded when XML cannot carry it. `results[].rawOutput` always
+    keeps the unmodified output; XML output is embedded as a parsed copy for PREMIS readers, which
+    is not byte-exact. When `fragments` is given, well-formed XML is not parsed into the tree: the extension
+    holds a token and `fragments` maps it to the XML bytes, which the renderer puts in place after
+    serialising (see `_splice`). With `exact_raw` the unmodified text is added next to the parsed copy, with
+    the SHA-256 of its UTF-8 bytes, so a reader can recover and check the original (MES-REQ-3-004).
+    """
+    raw = result["raw_output"]
+    if raw is None:
+        return
+    for detail in event_element.iter(_premis("eventOutcomeDetail")):
+        note = detail.find(_premis("eventOutcomeDetailNote"))
+        if note is None or not (note.text or "").startswith(premis.OUTPUT_FORMAT_NOTE_PREFIX):
+            continue
+        extension = ET.SubElement(detail, _premis("eventOutcomeDetailExtension"))
+        is_xml = False
+        if result["raw_output_format"] == "xml" and fragments is not None:
+            root = _xml_root_bytes(raw)
+            if root is not None:
+                token = "MESRAW" + uuid.uuid4().hex
+                extension.text = token
+                fragments[token] = root
+                is_xml = True
+        elif result["raw_output_format"] == "xml":
+            parsed = _parse_xml_fragment(raw)
+            if parsed is not None:
+                extension.append(parsed)
+                is_xml = True
+        if not is_xml or exact_raw:
+            node = ET.SubElement(extension, "rawOutput")  # no namespace, like any tool element in the extension
+            node.set("format", str(result["raw_output_format"] or "text"))
+            # A parser turns CR LF into LF, so text with a CR is only exact as base64.
+            _set_text(node, raw, force_base64="\r" in raw)
+            if exact_raw:
+                node.set("sha256", hashlib.sha256(raw.encode("utf-8")).hexdigest())
+        return
+
+
+def _splice(document, fragments):
+    """Put the XML fragments of `_embed_raw_output` in place of their tokens in the serialised `document`."""
+    for token, fragment in fragments.items():
+        document = document.replace(token.encode("ascii"), fragment, 1)
+    return document
+
+
+def _premis_events(parent, events, results, *, exact_raw=False, fragments=None):
+    """The events, with each tool's raw output attached to that tool's event.
+
+    The order is: the FFIS identification event (only when FFIS was called), one event per tool in the
+    order of `results`, then the summary event. So the tool events start after the events that are
+    neither a tool event nor the summary, which is one (the identification event) or none.
+    """
+    first_tool_event = len(events) - len(results) - 1
+    for position, event in enumerate(events):
+        _premis_element(parent, "event", event)
+        tool_index = position - first_tool_event
+        if 0 <= tool_index < len(results):
+            _embed_raw_output(parent[-1], results[tool_index], exact_raw=exact_raw, fragments=fragments)
+
+
+def _premis_object(parent, value):
+    """<premis:object xsi:type="premis:file">; the JSON `objectCategory` becomes the xsi:type, not an element."""
+    members = dict(value)
+    category = members.pop("objectCategory")
+    element = ET.SubElement(parent, _premis("object"))
+    element.set(XSI_TYPE, f"premis:{category}")
+    for key, member in members.items():
+        _premis_element(element, key, member)
+
+
+def _set_text(element, value, *, force_base64=False):
     value = str(value)
-    if _INVALID_XML_CHARS.search(value):
+    if force_base64 or _INVALID_XML_CHARS.search(value):
         element.set("encoding", "base64")
         element.text = base64.b64encode(value.encode("utf-8")).decode("ascii")
     else:
         element.text = value
 
 
-def _text(parent, name, value, *, encoded=False):
-    """Append <name>value</name>; skip when value is None."""
-    if value is None:
-        return None
-    child = ET.SubElement(parent, _q(name))
-    if encoded:
-        _set_text(child, value)
-    else:
-        child.text = str(value)
-    return child
+PREMIS_SCHEMA_LOCATION = f"{PREMIS_NAMESPACE} https://www.loc.gov/standards/premis/premis.xsd"
+PREMIS_VERSION = "3.0"
 
 
-def _text_list(parent, name, values):
-    container = ET.SubElement(parent, _q(name))
-    for value in values:
-        _text(container, "item", value, encoded=True)
-    return container
+def build_premis_element(results: list[dict], *, exact_raw: bool = False, fragments: dict | None = None) -> ET.Element:
+    """A standalone PREMIS document for one or more extraction results.
 
+    `exact_raw` adds the unmodified raw output to each tool event (see `_embed_raw_output`).
 
-def _error_lists(parent, data):
-    """errors, then the optional errorCategories and errorDetails (absent in older producers)."""
-    _text_list(parent, "errors", data["errors"])
-    if "error_categories" in data:
-        categories = ET.SubElement(parent, _q("errorCategories"))
-        for category in data["error_categories"]:
-            _text(categories, "item", category)
-    if "error_details" in data:
-        details = ET.SubElement(parent, _q("errorDetails"))
-        for detail in data["error_details"]:
-            item = ET.SubElement(details, _q("errorDetail"))
-            _text(item, "message", detail["message"], encoded=True)
-            _text(item, "category", detail["category"])
-
-
-def _json_value(parent, name, value):
-    """Generic JSON tree, for free-form data such as FFIS provenance."""
-    element = ET.SubElement(parent, _q(name))
-    if isinstance(value, dict):
-        obj = ET.SubElement(element, _q("object"))
-        for key, member in value.items():
-            node = _json_value(obj, "member", member)
-            _set_text_attr(node, "name", key)
-    elif isinstance(value, (list, tuple)):
-        array = ET.SubElement(element, _q("array"))
-        for item in value:
-            _json_value(array, "item", item)
-    elif value is None:
-        ET.SubElement(element, _q("null"))
-    elif isinstance(value, bool):
-        ET.SubElement(element, _q("boolean")).text = "true" if value else "false"
-    elif isinstance(value, (int, float)):
-        ET.SubElement(element, _q("number")).text = repr(value)
-    else:
-        _set_text(ET.SubElement(element, _q("string")), value)
-    return element
-
-
-def _set_text_attr(element, name, value):
-    # Attribute values cannot be base64-flagged; replace unrepresentable characters.
-    element.set(name, _INVALID_XML_CHARS.sub("�", str(value)))
-
-
-def build_result_element(data: dict) -> ET.Element:
-    root = ET.Element(_q("extractionResult"))
-    _text(root, "requestId", data["request_id"])
-    _text(root, "filename", data["filename"], encoded=True)
-
-    resolution = data["tool_resolution"]
-    res_el = ET.SubElement(root, _q("toolResolution"))
-    _text(res_el, "puid", resolution["puid"])
-    _text(res_el, "mimeType", resolution["mime_type"])
-    _text_list(res_el, "resolvedTools", resolution["resolved_tools"])
-    _text(res_el, "selectionMethod", resolution["selection_method"])
-    _text(res_el, "identificationUrl", resolution["identification_url"])
-    if "matched_rules" in resolution:
-        _text_list(res_el, "matchedRules", resolution["matched_rules"])
-
-    results_el = ET.SubElement(root, _q("results"))
-    for result in data["results"]:
-        item = ET.SubElement(results_el, _q("result"))
-        _text(item, "tool", result["tool"])
-        _text(item, "version", result["version"], encoded=True)
-        _text(item, "status", result["status"])
-        _text(item, "startedAt", result["started_at"])
-        _text(item, "finishedAt", result["finished_at"])
-        if result["command"] is not None:
-            _text_list(item, "command", result["command"])
-        _text(item, "rawOutput", result["raw_output"], encoded=True)
-        _text(item, "rawOutputFormat", result["raw_output_format"])
-        _error_lists(item, result)
-        _text_list(item, "warnings", result["warnings"])
-
-    provenance = data["provenance"]
-    prov_el = ET.SubElement(root, _q("provenance"))
-    _text(prov_el, "timestamp", provenance["timestamp"])
-    _text(prov_el, "serviceVersion", provenance["service_version"])
-    versions_el = ET.SubElement(prov_el, _q("toolVersions"))
-    for tool, version in provenance["tool_versions"].items():
-        if version is not None:
-            node = _text(versions_el, "toolVersion", version)
-            _set_text_attr(node, "tool", tool)
-    _premis_element(prov_el, "event", provenance["event"])
-    for agent in provenance["agents"]:
-        _premis_element(prov_el, "agent", agent)
-    if "matched_rules" in provenance:
-        _text_list(prov_el, "matchedRules", provenance["matched_rules"])
-    if provenance["ffis"] is not None:
-        _json_value(prov_el, "ffis", provenance["ffis"])
-
-    _error_lists(root, data)
-    _text_list(root, "warnings", data["warnings"])
+    All objects come first, then all events, then all agents, as the PREMIS 3 schema orders them. Every
+    identifier is a fresh UUID per result, so several results never clash.
+    """
+    root = ET.Element(
+        _premis("premis"),
+        {"version": PREMIS_VERSION, f"{{{XSI_NAMESPACE}}}schemaLocation": PREMIS_SCHEMA_LOCATION},
+    )
+    for result in results:
+        _premis_object(root, result["provenance"]["object"])
+    for result in results:
+        _premis_events(root, result["provenance"]["events"], result["results"], exact_raw=exact_raw, fragments=fragments)
+    for result in results:
+        for agent in result["provenance"]["agents"]:
+            _premis_element(root, "agent", agent)
     return root
 
 
-def build_batch_element(data: dict) -> ET.Element:
-    """The batch response; its own namespace (mes-batch.xsd), wrapping the unchanged result elements."""
-    root = ET.Element(f"{{{BATCH_NAMESPACE}}}batch")
-    for entry in data["results"]:
-        item = ET.SubElement(root, f"{{{BATCH_NAMESPACE}}}entry")
-        ET.SubElement(item, f"{{{BATCH_NAMESPACE}}}index").text = str(entry["index"])
-        _set_text(ET.SubElement(item, f"{{{BATCH_NAMESPACE}}}filename"), entry["filename"])
-        if "result" in entry:
-            item.append(build_result_element(entry["result"]))
-        else:
-            errors = ET.SubElement(item, f"{{{BATCH_NAMESPACE}}}errors")
-            for message in entry["errors"]:
-                _set_text(ET.SubElement(errors, _q("item")), message)
-    return root
+class PremisXMLRenderer(BaseRenderer):
+    """The PREMIS part of a result as a standalone `premis:premis` document (`Accept: application/premis+xml`
+    or `?format=premis`; add `?raw=exact` for the unmodified raw output in each tool event). It is the
+    only XML form of the API."""
 
-
-def build_job_batch_element(data: dict) -> ET.Element:
-    """The async batch envelope; its own namespace (mes-job-batch.xsd)."""
-    ns = f"{{{JOB_BATCH_NAMESPACE}}}"
-    root = ET.Element(f"{ns}jobBatch")
-    for name, key in (("batchId", "batch_id"), ("createdAt", "created_at"), ("status", "status")):
-        ET.SubElement(root, f"{ns}{name}").text = str(data[key])
-    jobs = ET.SubElement(root, f"{ns}jobs")
-    for entry in data["jobs"]:
-        job = ET.SubElement(jobs, f"{ns}job")
-        ET.SubElement(job, f"{ns}index").text = str(entry["index"])
-        _set_text(ET.SubElement(job, f"{ns}filename"), entry["filename"])
-        ET.SubElement(job, f"{ns}jobId").text = str(entry["job_id"])
-        ET.SubElement(job, f"{ns}status").text = str(entry["status"])
-    return root
-
-
-_JOB_KEYS = {"job_id", "status", "created_at", "errors"}
-_JOB_BATCH_KEYS = {"batch_id", "status", "created_at", "jobs"}
-
-
-def build_job_element(data: dict) -> ET.Element:
-    """The job envelope; its own namespace (mes-job.xsd), not the result's."""
-    root = ET.Element(f"{{{JOB_NAMESPACE}}}job")
-    for name, key in (("jobId", "job_id"), ("status", "status"), ("createdAt", "created_at")):
-        ET.SubElement(root, f"{{{JOB_NAMESPACE}}}{name}").text = str(data[key])
-    errors = ET.SubElement(root, f"{{{JOB_NAMESPACE}}}errors")
-    for message in data["errors"]:
-        _set_text(ET.SubElement(errors, f"{{{JOB_NAMESPACE}}}item"), message)
-    return root
-
-
-class MESXMLRenderer(BaseRenderer):
-    media_type = "application/xml"
-    format = "xml"
+    media_type = "application/premis+xml"
+    format = "premis"
     charset = "utf-8"
 
     def render(self, data, accepted_media_type=None, renderer_context=None):
-        if data is None:
-            return b""
-        if isinstance(data, dict) and _JOB_KEYS <= data.keys():
-            ET.register_namespace("", JOB_NAMESPACE)
-            return ET.tostring(build_job_element(data), encoding="utf-8", xml_declaration=True)
-        if isinstance(data, dict) and data.keys() == _JOB_BATCH_KEYS:
-            ET.register_namespace("", JOB_BATCH_NAMESPACE)
-            ET.register_namespace("r", NAMESPACE)
-            return ET.tostring(build_job_batch_element(data), encoding="utf-8", xml_declaration=True)
-        if isinstance(data, dict) and data.keys() == {"results"}:
-            # A batch has only `results`; a single result always carries more (request_id, ...).
-            ET.register_namespace("", BATCH_NAMESPACE)
-            ET.register_namespace("r", NAMESPACE)
-            ET.register_namespace("premis", PREMIS_NAMESPACE)
-            return ET.tostring(build_batch_element(data), encoding="utf-8", xml_declaration=True)
-        if not (isinstance(data, dict) and "results" in data):
-            # Error payloads ({"errors": [...]}, DRF field errors) have no result schema.
-            return self._render_error(data)
-        ET.register_namespace("", NAMESPACE)
+        results = self._results(data)
+        if results is None:
+            # Only results are rendered; errors are answered as JSON by the exception handler and no other
+            # route offers this renderer.
+            raise ValueError("PremisXMLRenderer renders extraction results only.")
         ET.register_namespace("premis", PREMIS_NAMESPACE)
-        return ET.tostring(build_result_element(data), encoding="utf-8", xml_declaration=True)
+        ET.register_namespace("xsi", XSI_NAMESPACE)
+        exact_raw = self._exact_raw(renderer_context)
+        fragments = {}
+        root = build_premis_element(results, exact_raw=exact_raw, fragments=fragments)
+        return _splice(ET.tostring(root, encoding="utf-8", xml_declaration=True), fragments)
 
     @staticmethod
-    def _render_error(data):
-        ET.register_namespace("", NAMESPACE)
-        root = ET.Element(_q("error"))
-        _json_value(root, "detail", data)
-        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    def _exact_raw(renderer_context):
+        """True only for `?raw=exact`: the unmodified raw output is added to each tool event."""
+        request = (renderer_context or {}).get("request")
+        params = getattr(request, "query_params", None) or {}
+        return params.get("raw") == "exact"
+
+    @staticmethod
+    def _results(data):
+        if isinstance(data, dict) and "provenance" in data and "results" in data:
+            return [data]
+        return None
+

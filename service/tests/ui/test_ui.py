@@ -64,10 +64,17 @@ class UiTests(SimpleTestCase):
         html = self._html()
         self.assertIn('id="batch-results"', html)
         self.assertIn("batch-group-", html)
-        self.assertIn("/api/v1/extract/batch/", html)
+        self.assertNotIn("/api/v1/extract/batch/", html)  # batch is asynchronous only
         self.assertIn("/api/v1/jobs/batch/", html)
         self.assertIn("/api/v1/job-batches/", html)
         self.assertIn("max_files_per_request", html)
+
+    def test_without_async_several_files_go_one_by_one_to_the_single_file_route(self):
+        html = self._html()
+        self.assertIn("async function runSequentialBatch(files, metadata)", html)
+        self.assertIn("if (asyncEnabled) await runAsyncBatch(files, form);", html)
+        self.assertIn("else await runSequentialBatch(files, metadata);", html)
+        self.assertNotIn("runSyncBatch", html)
 
     def test_batch_sends_the_files_field_once_per_file(self):
         html = self._html()

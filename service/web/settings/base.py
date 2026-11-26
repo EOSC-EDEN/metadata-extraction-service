@@ -155,6 +155,7 @@ MES_VERAPDF_FEATURES = os.environ.get("MES_VERAPDF_FEATURES", "")
 MES_TOOLS = {
     "exiftool": {
         "adapter": "apps.extraction.adapters.exiftool.ExifToolAdapter",
+        "display_name": "Exiftool",
         "kind": "subprocess",
         "invocation_command": os.environ.get("MES_EXIFTOOL_COMMAND", "exiftool"),
         "extra_args": [],
@@ -164,6 +165,7 @@ MES_TOOLS = {
     },
     "mediainfo": {
         "adapter": "apps.extraction.adapters.mediainfo.MediaInfoAdapter",
+        "display_name": "MediaInfo",
         "kind": "subprocess",
         "invocation_command": os.environ.get("MES_MEDIAINFO_COMMAND", "mediainfo"),
         "extra_args": [],
@@ -175,6 +177,7 @@ MES_TOOLS = {
     # installed in the default image (docker compose installs a tool in the image when it is enabled).
     "ffprobe": {
         "adapter": "apps.extraction.adapters.ffprobe.FFprobeAdapter",
+        "display_name": "ffprobe",
         "kind": "subprocess",
         "invocation_command": os.environ.get("MES_FFPROBE_COMMAND", "ffprobe"),
         "extra_args": [],
@@ -261,7 +264,7 @@ MES_MAX_UPLOAD_BYTES = int(
     os.environ.get("MES_MAX_UPLOAD_BYTES", str(512 * 1024 * 1024))
 )
 
-# Most files accepted by one batch request (POST /api/v1/extract/batch/), a positive integer
+# Most files accepted by one batch request (POST /api/v1/jobs/batch/), a positive integer
 # validated at startup. MES_MAX_UPLOAD_BYTES applies to the whole batch body, not per file.
 MES_MAX_FILES_PER_REQUEST = int(os.environ.get("MES_MAX_FILES_PER_REQUEST", "10"))
 
@@ -328,10 +331,9 @@ LOGGING = {
 
 REST_FRAMEWORK = {
     # JSON is first, so it is the default when no Accept header is sent.
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
-        "apps.api.renderers.MESXMLRenderer",
-    ],
+    # JSON only by default; the three routes that return an extraction result add
+    # `PremisXMLRenderer` themselves. `application/xml` is not offered anywhere (406).
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "apps.api.exceptions.exception_handler",
     # The API is unauthenticated. The default SessionAuthentication would look up any
     # `sessionid` cookie (browsers share cookies across localhost ports) in the database.

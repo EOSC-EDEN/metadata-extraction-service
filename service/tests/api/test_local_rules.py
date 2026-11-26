@@ -13,9 +13,9 @@ RULES = "rules:\n- {name: jpeg-only, extensions: [JPG], tools: [exiftool]}\n"
 def _volatile_stripped(body):
     body.pop("request_id")
     body["provenance"].pop("timestamp")
-    event = body["provenance"]["event"]
-    event.pop("eventDateTime")
-    event.pop("eventIdentifier")
+    body["provenance"].pop("events")  # UUIDs, times and command lines differ per request
+    body["provenance"].pop("agents")
+    body["provenance"]["object"].pop("linkingEventIdentifier")
     for item in body["results"]:
         for key in ("started_at", "finished_at", "command"):
             item.pop(key)
@@ -45,7 +45,8 @@ class LocalRuleEndpointTests(JobsViewTestCase):
         self.assertEqual(resolution["matched_rules"], ["jpeg-only"])
         self.assertEqual(resolution["resolved_tools"], ["exiftool"])
         self.assertEqual(body["provenance"]["matched_rules"], ["jpeg-only"])
-        self.assertIn("jpeg-only", body["provenance"]["event"]["eventDetailInformation"][0]["eventDetail"])
+        summary = body["provenance"]["events"][-1]
+        self.assertIn("jpeg-only", summary["eventDetailInformation"][0]["eventDetail"])
 
     def test_extension_without_a_rule_runs_only_the_default_tool(self, _run):
         body = self.extract(file=_upload(name="photo.png")).json()
@@ -56,14 +57,14 @@ class LocalRuleEndpointTests(JobsViewTestCase):
 
     def test_async_result_equals_the_sync_result(self, _run):
         sync = self.extract().json()
-        job_id = self.submit(mime_type="").json()["job_id"]
+        job_id = self.submit().json()["job_id"]
         result = self.client.get(f"{SUBMIT}{job_id}/result/").json()
         self.assertEqual(result["tool_resolution"]["matched_rules"], ["jpeg-only"])
         self.assertEqual(_volatile_stripped(result), _volatile_stripped(sync))
 
-    def test_xml_carries_matched_rules(self, _run):
+    def test_the_premis_document_carries_the_matched_rules(self, _run):
         response = APIClient().post(
-            "/api/v1/extract/", {"file": _upload()}, format="multipart", HTTP_ACCEPT="application/xml"
+            "/api/v1/extract/", {"file": _upload()}, format="multipart", HTTP_ACCEPT="application/premis+xml"
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"<matchedRules><item>jpeg-only</item></matchedRules>", response.content)
+        self.assertIn(b"local rules: jpeg-only", response.content)

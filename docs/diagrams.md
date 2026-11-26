@@ -3,7 +3,7 @@
 These diagrams show how a request flows through MES and how the **tool adapters** are invoked.
 
 {{ MES-REQ-1-005 }} requires the wrapper to invoke each configured extraction tool either as a
-**local CLI subprocess** (ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac) or as an
+**local CLI subprocess** (ExifTool, MediaInfo, FFprobe, ImageMagick, metaflac, JHOVE, veraPDF, File Scraper) or as an
 **externally hosted HTTP service** (Apache Tika). Both integration paths sit behind the same adapter
 abstraction, so adding a tool never requires changes to the orchestrator (Requirement Group 4,
 {{ MES-REQ-4-007 }}).
@@ -18,17 +18,16 @@ Diagrams:
 2. [Local CLI tool path](#sequence-diagram--local-cli-tool-path-exiftool) — what a subprocess adapter does
 3. [Hosted HTTP service path](#sequence-diagram--hosted-http-service-path-apache-tika) — what an HTTP adapter does
 4. [Asynchronous job](#sequence-diagram--asynchronous-job-post-apiv1jobs) — submit, poll, fetch the result
-5. [Synchronous batch](#sequence-diagram--synchronous-batch-post-apiv1extractbatch) — several files in one request
-6. [Asynchronous batch](#sequence-diagram--asynchronous-batch-post-apiv1jobsbatch) — one job per file, polled as a batch
+5. [Asynchronous batch](#sequence-diagram--asynchronous-batch-post-apiv1jobsbatch) — one job per file, polled as a batch
 
 ## Sequence diagram — synchronous extraction (`POST /api/v1/extract/`)
 
 The complete request flow. Tools are resolved first: the file is identified (by the caller, or by FFIS
-when the caller gave no identifier), and the identifier is sent to the File Format Library, which
-returns the extraction tools for that format and the libraries consulted ({{ MES-REQ-3-009 }}). If the
-Format Library cannot be reached, or there is no identifier, MES falls back to the configured default
-tool ({{ MES-REQ-1-001 }}). The resolved tools then run concurrently in a thread pool bounded by
-`MES_MAX_CONCURRENT_TOOLS`. The two per-tool paths are shown in detail in the next two diagrams.
+when the caller gave no identifier), and the identifier is matched against the local format rules
+(PUID or file extension), which name the tools to run. When no rule matches, or the matching rules name
+only unusable tools, MES falls back to the configured default tool ({{ MES-REQ-1-001 }}). The File Format
+Library is not integrated yet; the local rules stand in for it. The resolved tools then run concurrently in a
+thread pool bounded by `MES_MAX_CONCURRENT_TOOLS`. The two per-tool paths are shown in detail in the next two diagrams.
 
 Failure handling ({{ MES-REQ-3-006 }}, {{ MES-REQ-3-008 }}, {{ MES-REQ-5-001 }}): a failed tool is always
 reported in its own result and never discards the other tools' results. Every error carries a
@@ -44,46 +43,42 @@ sequenceDiagram
     participant Orch as ExtractionOrchestrator
     participant Res as resolve_tools
     participant FFIS as FFIS (identification)
-    participant FL as FormatLibraryClient
-    participant Lib as File Format Library (external)
+    participant Rules as Local format rules
     participant Pool as ThreadPoolExecutor
     participant Adapter as Tool adapter (one per tool)
 
-    Client->>API: POST /api/v1/extract/ (file, puid?, mime_type?)
+    Client->>API: POST /api/v1/extract/ (file, puid?, mime_type?, object identifier?)
+    API->>API: negotiate the response format, before anything else is read
+    alt Accept asks for a form MES does not offer (application/xml, text/xml)
+        API-->>Client: 406 Not Acceptable (JSON error), nothing is extracted
+    end
     API->>API: check declared length, validate request
     alt too large or invalid
-        API-->>Client: 413 or 400 error response
+        API-->>Client: 413 or 400 error response (always JSON)
     end
-    API->>API: save_upload to a temp dir (original suffix kept)
-    API->>Orch: extract(path, puid, mime_type, request_id)
-    Orch->>Res: resolve_tools(path, puid, mime_type)
-    alt no PUID or MIME type supplied
-        alt FFIS enabled
-            Res->>FFIS: identify(path)
-            alt FFIS identifies the file
-                FFIS-->>Res: puid, mime_type, provenance
-            else unreachable or inconclusive
-                FFIS-->>Res: error or no result
-                note over Res: warning recorded, no identifier
-            end
-        else FFIS disabled
-            note over Res: no identifier
+    API->>API: save_upload to a temp dir (original suffix kept), SHA-256 and size of the file
+    API->>Orch: extract(path, puid, mime_type, request_id, filename)
+    Orch->>Res: resolve_tools(path, puid, mime_type, filename)
+    alt puid or mime_type supplied
+        note over Res: selection_method default_tool_caller_identified, FFIS is not called
+    else FFIS enabled
+        Res->>FFIS: identify(path), the call is timed
+        alt FFIS identifies the file
+            FFIS-->>Res: puid, mime_type, provenance
+        else unreachable or inconclusive
+            FFIS-->>Res: error or no result
+            note over Res: warning recorded, no identifier
         end
+    else FFIS disabled
+        note over Res: no identifier
     end
-    alt an identifier is available (from the caller or from FFIS)
-        Res->>FL: resolve(puid, mime_type)
-        FL->>Lib: request the tools for this format
-        Lib-->>FL: tools per format, library details
-        alt resolved
-            FL-->>Res: tools and the libraries used
-            Res-->>Orch: tools, selection_method format_library (caller identified) or format_library_via_ffis, format_libraries_used
-        else FormatLibraryUnavailable
-            FL-->>Res: network, HTTP, timeout or malformed-payload error
-            Res-->>Orch: default tool, selection_method default_tool_format_library_unreachable, warning
-        end
-    else no identifier at all
-        note over Res,FL: the Format Library is never called
-        Res-->>Orch: default tool, FFIS fallback selection_method, warning if FFIS failed
+    Res->>Rules: match(puid, extension of the filename)
+    alt at least one rule matches
+        Rules-->>Res: tools of all matching rules
+        note over Res: unknown or disabled tools are skipped with a warning
+        Res-->>Orch: those tools, selection_method local_rule or local_rule_via_ffis
+    else no rule matches, or no usable tool is left
+        Res-->>Orch: the default tool only, selection_method default_tool_*
     end
     Orch->>Pool: submit one task per tool
     par for each tool
@@ -95,8 +90,12 @@ sequenceDiagram
     Orch->>Orch: failed optional tools become top-level warnings
     Orch->>Orch: log every error and warning with the request_id
     Orch-->>API: AggregatedExtractionResult
-    API->>API: record metrics, serialize result
-    API-->>Client: 200 OK (JSON or XML per Accept header)
+    API->>API: record metrics, serialize result, build the PREMIS object, events (format identification when FFIS was called, one per tool, summary) and agents
+    alt Accept: application/premis+xml
+        API-->>Client: 200 OK, the PREMIS document (raw output embedded in the tool events; ?raw=exact adds the unmodified text)
+    else
+        API-->>Client: 200 OK, JSON (default)
+    end
 ```
 
 ## Sequence diagram — local CLI tool path (ExifTool)
@@ -117,9 +116,9 @@ sequenceDiagram
     Orch->>Adapter: ExifToolAdapter(invocation_command, extra_args, timeout_seconds)
     Orch->>Adapter: run(file_path)
     Adapter->>Adapter: invoke(): build_command(file_path)
-    Adapter->>CLI: subprocess.run(["exiftool", "-json", *extra_args, file_path], timeout, check=True)
+    Adapter->>CLI: subprocess.run(["exiftool", "-X", *extra_args, file_path], timeout, check=True)
     alt exit 0
-        CLI-->>Adapter: stdout (JSON)
+        CLI-->>Adapter: stdout (RDF/XML)
         opt stderr is not empty
             note over Adapter: stderr is kept as a warning (MES-REQ-5-001)
         end
@@ -183,7 +182,7 @@ sequenceDiagram
     participant Worker as worker thread
     participant Orch as ExtractionOrchestrator
 
-    Client->>API: POST /api/v1/jobs/ (file, puid?, mime_type?)
+    Client->>API: POST /api/v1/jobs/ (file, puid?, mime_type?, object identifier?)
     API->>API: check declared length, validate request, save_upload to a work dir
     API->>Jobs: submit(file_path, work_dir, ...)
     Jobs->>Jobs: purge_expired()
@@ -210,13 +209,13 @@ sequenceDiagram
         alt unknown or expired
             API-->>Client: 404
         else
-            API-->>Client: 200 job envelope (status)
+            API-->>Client: 200 job envelope (JSON only)
         end
     end
 
     Client->>API: GET /api/v1/jobs/{job_id}/result/
     alt succeeded
-        API-->>Client: 200 mes-result document
+        API-->>Client: 200 result, the same as /extract/ (JSON, or PREMIS XML with Accept: application/premis+xml)
     else pending, running or failed
         API-->>Client: 409 job_not_finished
     end
@@ -225,43 +224,8 @@ sequenceDiagram
 A finished job's data is kept for `MES_JOB_TTL_SECONDS`; expired jobs and their uploads are purged on
 access and on submit.
 
-## Sequence diagram — synchronous batch (`POST /api/v1/extract/batch/`)
-
-Several files in one multipart request (the `files` field repeated once per file; at most
-`MES_MAX_FILES_PER_REQUEST`, advertised by `GET /limits/`). `puid` and `mime_type` are defaults for
-every file; the optional `file_metadata` object, keyed by filename, gives individual files their own
-`puid`, `mime_type` and object identifier (a request-level `object_identifier` is not accepted). A file
-without an object identifier is linked in its PREMIS event by its filename. The files are
-processed one after another, and each goes through the same `extract()` as `/extract/`, so its `result`
-equals what that route returns for it. A request that is not acceptable (no files, too many, an empty
-file, too large) is refused as a whole before anything runs. Once accepted, a file that fails gets an
-`errors` entry in its place and the others are unaffected, so the response is `200`.
-
-```mermaid
-sequenceDiagram
-    actor Client
-    participant API as BatchExtractMetadataView
-    participant Orch as ExtractionOrchestrator
-
-    Client->>API: POST /api/v1/extract/batch/ (files[], puid?, mime_type?, file_metadata?)
-    API->>API: check declared length, validate request and file_metadata
-    alt too large, no files, too many files, an empty file, invalid or unmatched file_metadata
-        API-->>Client: 413 or 400 error response (nothing is extracted)
-    end
-    API->>API: create one temp work dir
-    loop for each file, in order (index i)
-        API->>API: save_upload into work_dir/i (one directory per file)
-        API->>Orch: extract(path, puid, mime_type, request_id "{id}-i", filename)
-        alt extracted
-            Orch-->>API: AggregatedExtractionResult
-            API->>API: entry {index, filename, result}
-        else ToolNotConfigured or an unexpected error
-            API->>API: log with the request_id, entry {index, filename, errors}
-        end
-    end
-    API->>API: remove the work dir, record metrics
-    API-->>Client: 200 OK {"results": [entry, ...]} (JSON or XML per Accept header)
-```
+The job envelopes (submit, status) are JSON only: a request for XML gets `406`. Only `GET /jobs/{job_id}/result/`
+can return the PREMIS document (`Accept: application/premis+xml`; add `?raw=exact` for the unmodified output).
 
 ## Sequence diagram — asynchronous batch (`POST /api/v1/jobs/batch/`)
 
@@ -305,9 +269,9 @@ sequenceDiagram
         alt unknown or expired
             API-->>Client: 404
         else
-            API-->>Client: 200 batch envelope (each file's job_id and current status)
+            API-->>Client: 200 batch envelope, JSON (each file's job_id and current status)
         end
     end
 ```
 
-Each job in a batch is kept for `MES_JOB_TTL_SECONDS` like any other job.
+Each job in a batch is kept for `MES_JOB_TTL_SECONDS` like any other job. The batch envelope is JSON only, like the job envelope; each file's result is fetched per job, as JSON or as the PREMIS document.

@@ -28,7 +28,7 @@ class ErrorAndWarningSurfacingTests(TestCase):
         side_effect=subprocess.TimeoutExpired(cmd="exiftool", timeout=1),
     )
     def test_tool_timeout_is_reported_per_tool_and_top_level(self, _run):
-        body = self._post(mime_type="image/jpeg").json()
+        body = self._post().json()
         self.assertEqual(body["results"][0]["status"], "timeout")
         self.assertTrue(body["results"][0]["errors"])
         self.assertTrue(any("timeout" in w for w in body["warnings"]))
@@ -39,7 +39,7 @@ class ErrorAndWarningSurfacingTests(TestCase):
     def test_mandatory_tool_failure_is_a_top_level_error(self, _run):
         tools = {k: {**v, "mandatory": True} for k, v in settings.MES_TOOLS.items()}
         with override_settings(MES_TOOLS=tools):
-            body = self._post(mime_type="image/jpeg").json()
+            body = self._post().json()
         self.assertTrue(any("Mandatory tool 'exiftool'" in e for e in body["errors"]))
 
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
@@ -47,7 +47,7 @@ class ErrorAndWarningSurfacingTests(TestCase):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="[{}]", stderr="Warning: minor problem"
         )
-        body = self._post(mime_type="image/jpeg").json()
+        body = self._post().json()
         self.assertEqual(body["results"][0]["warnings"], ["Warning: minor problem"])
 
     @override_settings(MES_FFIS_ENABLED=True, MES_FFIS_BASE_URL="http://ffis.invalid")
@@ -68,15 +68,17 @@ class ErrorAndWarningSurfacingTests(TestCase):
     )
     def test_errors_are_logged_with_request_id(self, _run):
         with self.assertLogs("apps.extraction.services.orchestrator", level="WARNING") as logs:
-            body = self._post(mime_type="image/jpeg").json()
+            body = self._post().json()
         self.assertTrue(all(r.request_id == body["request_id"] for r in logs.records))
         self.assertTrue(any(r.levelname == "ERROR" for r in logs.records))
 
-    def test_validation_error_is_xml_when_requested(self):
-        response = self.client.post(self.url, {}, format="multipart", HTTP_ACCEPT="application/xml")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("application/xml", response["Content-Type"])
-        self.assertIn(b"errors", response.content)
+    def test_validation_error_is_json_whatever_xml_was_requested(self):
+        for accept, status in (("application/premis+xml", 400), ("application/xml", 406)):
+            with self.subTest(accept=accept):
+                response = self.client.post(self.url, {}, format="multipart", HTTP_ACCEPT=accept)
+                self.assertEqual(response.status_code, status)
+                self.assertIn("application/json", response["Content-Type"])
+                self.assertIn("errors", response.json())
 
     @mock.patch(
         "apps.api.views.ExtractionOrchestrator.extract", side_effect=RuntimeError("secret detail")

@@ -2,7 +2,7 @@
 
 MES returns results and stores nothing durable. Everything it keeps is temporary: uploads while they are processed, and job state until its TTL expires.
 
-The caller records the response (raw tool output, tool versions, timestamp, errors and warnings) in the Information Package and hands it on to AIP Versioning (CPP-021). The PREMIS `metadata extraction` event in the result is ready to copy into a PREMIS record, but writing it into the package is the caller's job.
+The caller records the response (raw tool output, tool versions, timestamp, errors and warnings) in the Information Package and hands it on to AIP Versioning (CPP-021). The PREMIS object, events and agents in the result (also available as a standalone `premis:premis` document, `application/premis+xml`) are ready to copy into a PREMIS record, but writing them into the package is the caller's job.
 
 ## Why
 

@@ -2,11 +2,13 @@
 
 Asynchronous processing is on by default. `POST /api/v1/extract/` stays synchronous; a job runs the same extraction on a bounded background thread pool, so its result is identical.
 
+The job envelopes are JSON only; the result of a job can also be fetched as PREMIS XML (`Accept: application/premis+xml`).
+
 A job is `failed` only when extraction could not run at all (for example no default tool is configured). A run in which a mandatory tool failed still `succeeded` and reports that in the result's `errors`.
 
 ## Turn it off
 
-Set `MES_ASYNC_ENABLED=false`. The `/jobs/` routes then answer `404`, `async_enabled` in `/api/v1/limits/` is `false`, and the UI hides its option.
+Set `MES_ASYNC_ENABLED=false`. The `/jobs/` routes then answer `404`, `async_enabled` in `/api/v1/limits/` is `false`, and the UI hides its option. There is no synchronous batch route, so [batch extraction](batch-extraction.md) is then unavailable: send files one at a time to `/extract/`.
 
 ## Choose a job store
 

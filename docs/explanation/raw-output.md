@@ -1,6 +1,8 @@
 # Why raw tool output is returned unmodified
 
-MES puts each tool's output in `raw_output` exactly as produced and never re-parses it (requirement MES-REQ-3-004). It labels the output with the tool, its version and its execution status, and nothing more.
+MES puts each tool's output in `raw_output` of the JSON result exactly as produced and never re-parses it (requirement MES-REQ-3-004). It labels the output with the tool, its version and its execution status, and nothing more.
+
+The PREMIS XML is the one place where the output is read: well-formed XML is embedded in the tool's event as elements, so a PREMIS reader can use it. That copy is parsed and re-serialised, so it is not byte-exact. Add `?raw=exact` to the request to get the unmodified text next to it, with its SHA-256; the JSON `raw_output` is always exact.
 
 ## Reasons
 

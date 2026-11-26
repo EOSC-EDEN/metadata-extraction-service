@@ -41,6 +41,9 @@ class AggregatedExtractionResult:
     #: FFIS's per-engine provenance, present only when FFIS identified the file.
     ffis_provenance: dict | None = None
     identification_url: str | None = None
+    #: The interval of the FFIS call (None when FFIS was not called).
+    identification_started_at: datetime | None = None
+    identification_finished_at: datetime | None = None
     #: Local format rules that selected the tools (empty unless selection_method is local_rule*).
     matched_rules: tuple[str, ...] = ()
 
@@ -95,6 +98,8 @@ class ExtractionOrchestrator:
             mime_type=resolution.mime_type if resolution else None,
             ffis_provenance=resolution.ffis_provenance if resolution else None,
             identification_url=resolution.identification_url if resolution else None,
+            identification_started_at=resolution.identification_started_at if resolution else None,
+            identification_finished_at=resolution.identification_finished_at if resolution else None,
             matched_rules=tuple(resolution.matched_rules) if resolution else (),
         )
 

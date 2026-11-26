@@ -9,6 +9,7 @@ the response and provenance. The Format Library hand-off replaces the local rule
 
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from django.conf import settings
 
@@ -32,6 +33,9 @@ class ToolResolution:
     ffis_provenance: dict | None = None
     #: Base URL of the identification service (FFIS) when it was consulted for this request.
     identification_url: str | None = None
+    #: When the FFIS call started and finished; None when FFIS was not called.
+    identification_started_at: datetime | None = None
+    identification_finished_at: datetime | None = None
     #: Names of the local format rules that matched (selection_method local_rule*), in file order.
     matched_rules: list[str] = field(default_factory=list)
 
@@ -84,6 +88,8 @@ def _apply_local_rules(resolution: ToolResolution, filename) -> ToolResolution:
         warnings=warnings,
         ffis_provenance=resolution.ffis_provenance,
         identification_url=resolution.identification_url,
+        identification_started_at=resolution.identification_started_at,
+        identification_finished_at=resolution.identification_finished_at,
         matched_rules=[rule.name for rule in matched],
     )
 
@@ -96,7 +102,7 @@ def _identify(file_path, puid, mime_type, ffis_client) -> ToolResolution:
     def resolution(selection_method, **kwargs):
         return ToolResolution(tools=tools, selection_method=selection_method, **kwargs)
 
-    if puid or mime_type:
+    if puid or mime_type:  # a hint from the caller replaces identification
         return resolution("default_tool_caller_identified", puid=puid, mime_type=mime_type)
 
     if not settings.MES_FFIS_ENABLED:
@@ -104,19 +110,20 @@ def _identify(file_path, puid, mime_type, ffis_client) -> ToolResolution:
 
     client = ffis_client or FFISClient()
     identification_url = getattr(client, "base_url", None) or None
+    started_at = datetime.now(timezone.utc)
     try:
         identified = client.identify(file_path)
     except FFISUnavailable as exc:
         return resolution(
             "default_tool_ffis_unreachable",
             warnings=[f"ffis_unreachable: {exc}"],
-            identification_url=identification_url,
+            **_consulted(identification_url, started_at),
         )
     if identified is None:
         return resolution(
             "default_tool_ffis_inconclusive",
             warnings=["ffis_inconclusive: FFIS could not identify the file's format."],
-            identification_url=identification_url,
+            **_consulted(identification_url, started_at),
         )
     return resolution(
         "default_tool_ffis_identified",
@@ -124,5 +131,14 @@ def _identify(file_path, puid, mime_type, ffis_client) -> ToolResolution:
         mime_type=identified.mime_type,
         warnings=list(identified.engine_warnings),
         ffis_provenance=identified.provenance,
-        identification_url=identification_url,
+        **_consulted(identification_url, started_at),
     )
+
+
+def _consulted(identification_url, started_at) -> dict:
+    """The fields that say FFIS was called: its URL and the interval of the call (finished now)."""
+    return {
+        "identification_url": identification_url,
+        "identification_started_at": started_at,
+        "identification_finished_at": datetime.now(timezone.utc),
+    }

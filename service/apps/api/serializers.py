@@ -64,8 +64,23 @@ def check_declared_length(content_length) -> None:
         )
 
 
+#: Request properties that no longer exist. A caller that still sends one gets a 400 instead of having it
+#: silently ignored. The names of the formats had no source.
+REMOVED_FIELDS = ("format_name", "format_version", "media_type_name")
+
+
+def reject_removed_fields(data) -> None:
+    """Raise a validation error naming every removed property that has a value.
+
+    A blank value counts as not given, as everywhere else: multipart forms send empty fields.
+    """
+    errors = {name: "No longer accepted." for name in REMOVED_FIELDS if data.get(name)}
+    if errors:
+        raise serializers.ValidationError(errors)
+
+
 class FileDescriptionSerializer(serializers.Serializer):
-    """What a caller may say about one file: its format and the PREMIS object it is.
+    """What a caller may say about one file: its format (PUID, MIME type) and the PREMIS object it is.
 
     The single-file routes take these fields next to the upload; the batch routes take them per
     file in the `file_metadata` manifest. One class, so both apply the same limits and rules.
@@ -77,6 +92,7 @@ class FileDescriptionSerializer(serializers.Serializer):
     object_identifier_type = serializers.CharField(required=False, allow_blank=True, max_length=64)
 
     def validate(self, attrs):
+        reject_removed_fields(self.initial_data)
         # Blank counts as not supplied (multipart forms send empty fields), as for puid and mime_type.
         given = [bool(attrs.get(name)) for name in ("object_identifier", "object_identifier_type")]
         if any(given) and not all(given):
@@ -103,10 +119,9 @@ class ExtractionRequestSerializer(FileDescriptionSerializer):
 class BatchExtractionRequestSerializer(serializers.Serializer):
     """Several files in one request: the `files` field repeated once per file.
 
-    `puid` and `mime_type` apply to every file that has no value of its own. `file_metadata` is an
-    optional JSON object keyed by uploaded filename; each value holds `puid`, `mime_type`,
-    `object_identifier` and `object_identifier_type` for that file, with the rules of the
-    single-file route. A key must name exactly one uploaded file. There is no request-level object
+    `puid` and `mime_type` apply to every file that has no value of its own. `file_metadata` is an optional
+    JSON object keyed by uploaded filename; each value holds `puid`, `mime_type`, `object_identifier` and
+    `object_identifier_type` for that file, with the rules of the single-file route. A key must name exactly one uploaded file. There is no request-level object
     identifier, because one identifier cannot name several files; a file without its own is linked
     by filename in its PREMIS event. An empty file makes the whole request invalid (as on the
     single-file routes), so it is refused before anything is extracted or queued.
@@ -121,6 +136,7 @@ class BatchExtractionRequestSerializer(serializers.Serializer):
     file_metadata = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
+        reject_removed_fields(self.initial_data)
         # Blank counts as not supplied (multipart forms send empty fields), as on the single route.
         for name in ("object_identifier", "object_identifier_type"):
             if self.initial_data.get(name):
@@ -273,8 +289,21 @@ def serialize_extraction_result(
     filename: str,
     object_identifier: str | None = None,
     object_identifier_type: str | None = None,
+    file_fixity: dict | None = None,
 ) -> dict:
-    timestamp = datetime.now(timezone.utc).isoformat()  # computed once: provenance and event share it
+    timestamp = datetime.now(timezone.utc).isoformat()
+    agent_ids = premis.new_agent_ids(result)  # the event links and the agents use the same UUIDs
+    events = premis.build_events(
+        result, timestamp=timestamp, agent_ids=agent_ids, request_id=request_id, filename=filename
+    )
+    premis_object = premis.build_object(
+        result,
+        filename=filename,
+        events=events,
+        object_identifier=object_identifier,
+        object_identifier_type=object_identifier_type,
+        file_fixity=file_fixity,
+    )
     return {
         "request_id": request_id,
         "filename": filename,
@@ -291,15 +320,9 @@ def serialize_extraction_result(
             "timestamp": timestamp,
             "service_version": SERVICE_VERSION,
             "tool_versions": {r.tool_name: r.tool_version for r in result.results},
-            "event": premis.build_event(
-                result,
-                request_id=request_id,
-                timestamp=timestamp,
-                filename=filename,
-                object_identifier=object_identifier,
-                object_identifier_type=object_identifier_type,
-            ),
-            "agents": premis.build_agents(result, service_version=SERVICE_VERSION),
+            "object": premis_object,
+            "events": events,
+            "agents": premis.build_agents(result, service_version=SERVICE_VERSION, agent_ids=agent_ids),
             "matched_rules": list(result.matched_rules),
             "ffis": result.ffis_provenance,
         },

@@ -11,9 +11,9 @@
 | `MES_FOOTER_TEXT` | empty | Small plain text shown in the web UI footer. |
 | `MES_DOCS_URL` | empty | URL of this documentation. When set, the web UI footer links to it. |
 | `MES_MAX_UPLOAD_BYTES` | `536870912` | Largest accepted upload (`413` above). |
-| `MES_MAX_FILES_PER_REQUEST` | `10` | Most files in a batch (integer ≥ 1; invalid values stop startup). |
+| `MES_MAX_FILES_PER_REQUEST` | `10` | Most files in a batch (`/jobs/batch/`; integer ≥ 1; invalid values stop startup). |
 | `MES_MAX_CONCURRENT_TOOLS` | `4` | Tools run concurrently within one request (integer ≥ 1). |
-| `MES_ASYNC_ENABLED` | `true` | Turns asynchronous processing on or off. |
+| `MES_ASYNC_ENABLED` | `true` | Turns asynchronous processing on or off. Batches (`/jobs/batch/`) need it. |
 | `MES_ASYNC_MAX_WORKERS` | `2` | Background threads running jobs (integer ≥ 1). |
 | `MES_ASYNC_MAX_JOBS` | `100` | Jobs held at once; more get `503` (integer ≥ 1). |
 | `MES_JOB_TTL_SECONDS` | `86400` | How long job data stays available (integer ≥ 1). |

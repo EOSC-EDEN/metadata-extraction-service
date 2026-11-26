@@ -12,7 +12,7 @@ from apps.extraction.adapters.imagemagick import ImageMagickAdapter
 RUN = "apps.extraction.adapters.base.subprocess.run"
 
 CASES = [
-    (FFprobeAdapter, "ffprobe", "json", ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "/tmp/f"]),
+    (FFprobeAdapter, "ffprobe", "xml", ["ffprobe", "-v", "error", "-print_format", "xml", "-show_format", "-show_streams", "/tmp/f"]),
     (ImageMagickAdapter, "imagemagick", "text", ["identify", "-verbose", "/tmp/f"]),
 ]
 

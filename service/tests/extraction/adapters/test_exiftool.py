@@ -13,14 +13,14 @@ class ExifToolAdapterTests(SimpleTestCase):
 
     def test_build_command(self):
         command = self._adapter().build_command("/tmp/file.jpg")
-        self.assertEqual(command, ["exiftool", "-json", "/tmp/file.jpg"])
+        self.assertEqual(command, ["exiftool", "-X", "/tmp/file.jpg"])
 
     @mock.patch("apps.extraction.adapters.base.subprocess.run")
-    def test_success_returns_raw_json_output(self, mock_run):
+    def test_success_returns_raw_xml_output(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
-            args=["exiftool", "-json", "/tmp/file.jpg"],
+            args=["exiftool", "-X", "/tmp/file.jpg"],
             returncode=0,
-            stdout='[{"FileName":"file.jpg"}]',
+            stdout='<rdf:RDF><rdf:Description/></rdf:RDF>',
             stderr="",
         )
 
@@ -28,12 +28,12 @@ class ExifToolAdapterTests(SimpleTestCase):
 
         self.assertEqual(result.tool_name, "exiftool")
         self.assertEqual(result.status, ToolExecutionStatus.SUCCESS)
-        self.assertEqual(result.raw_output, '[{"FileName":"file.jpg"}]')
-        self.assertEqual(result.raw_output_format, "json")
-        self.assertEqual(result.command, ("exiftool", "-json", "/tmp/file.jpg"))
+        self.assertEqual(result.raw_output, '<rdf:RDF><rdf:Description/></rdf:RDF>')
+        self.assertEqual(result.raw_output_format, "xml")
+        self.assertEqual(result.command, ("exiftool", "-X", "/tmp/file.jpg"))
         self.assertEqual(result.errors, [])
         mock_run.assert_called_once_with(
-            ["exiftool", "-json", "/tmp/file.jpg"],
+            ["exiftool", "-X", "/tmp/file.jpg"],
             capture_output=True,
             text=True,
             timeout=5,

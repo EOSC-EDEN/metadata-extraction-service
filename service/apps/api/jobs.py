@@ -46,6 +46,7 @@ from apps.api.job_store import (  # noqa: F401  (re-exported: the job types live
     RedisJobStore,
     build_job_store,
 )
+from apps.api import premis
 from apps.api.serializers import serialize_extraction_result
 from apps.extraction.exceptions import ToolNotConfigured
 from apps.extraction.services.orchestrator import ExtractionOrchestrator
@@ -59,7 +60,7 @@ _UNEXPECTED_ERROR = "An unexpected error occurred while processing the job."
 
 
 def _extract_and_serialize(
-    *, file_path, filename, puid, mime_type, object_identifier, object_identifier_type, request_id
+    *, file_path, filename, puid, object_identifier, object_identifier_type, request_id, mime_type=None,
 ) -> dict:
     result = ExtractionOrchestrator().extract(
         file_path, puid=puid, mime_type=mime_type, request_id=request_id, filename=filename
@@ -71,6 +72,7 @@ def _extract_and_serialize(
         filename,
         object_identifier=object_identifier,
         object_identifier_type=object_identifier_type,
+        file_fixity=premis.file_fixity(file_path),
     )
 
 
@@ -108,9 +110,9 @@ class JobService:
         work_dir,
         filename,
         puid,
-        mime_type,
         request_id,
         size_bytes,
+        mime_type=None,
         object_identifier=None,
         object_identifier_type=None,
     ) -> JobRecord:
@@ -149,9 +151,9 @@ class JobService:
     ) -> tuple[BatchRecord, list[JobRecord]]:
         """Queue one job per item (`file_path`, `work_dir`, `filename`, `size_bytes`), all or none.
 
-        An item may also carry its own `puid`, `mime_type`, `object_identifier` and
-        `object_identifier_type`; a `puid` or `mime_type` key (even `None`) replaces the shared
-        argument of the same name, which only serves items that have none.
+        An item may also carry its own `puid`, `mime_type`, `object_identifier` and `object_identifier_type`; a
+        `puid` or `mime_type` key (even `None`) replaces the shared argument of the same name, which only
+        serves items that have none.
 
         Raises `JobStoreFull`, with no job created, unless the store has room for every item; the
         caller then still owns every `work_dir`. Otherwise each job owns its `work_dir` from here on.

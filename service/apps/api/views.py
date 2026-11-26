@@ -7,15 +7,17 @@ import uuid
 
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, ValidationError
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.conf import settings
 from django.urls import reverse
 
+from apps.api import premis
 from apps.api.jobs import JobStatus, JobStoreFull, get_job_service
+from apps.api.renderers import PremisXMLRenderer
 from apps.api.openapi import (
-    BatchExtractAutoSchema,
     BatchJobStatusAutoSchema,
     BatchJobSubmitAutoSchema,
     ExtractAutoSchema,
@@ -69,6 +71,8 @@ class RequestIdMixin:
 class ExtractMetadataView(RequestIdMixin, APIView):
     """POST /api/v1/extract/ — extract metadata from a single uploaded file."""
 
+    renderer_classes = [JSONRenderer, PremisXMLRenderer]  # a result: JSON or PREMIS XML, `application/xml` is a 406
+
     schema = ExtractAutoSchema()
 
     def post(self, request):
@@ -95,6 +99,7 @@ class ExtractMetadataView(RequestIdMixin, APIView):
                     request_id=request.mes_request_id,
                     filename=upload.name,
                 )
+                fixity = premis.file_fixity(path)  # while the upload still exists
 
             metrics.record_tool_results(result.results)
             outcome = metrics.classify_outcome(result)
@@ -105,80 +110,11 @@ class ExtractMetadataView(RequestIdMixin, APIView):
                     upload.name,
                     object_identifier=data.get("object_identifier") or None,
                     object_identifier_type=data.get("object_identifier_type") or None,
+                    file_fixity=fixity,
                 )
             )
         finally:
             metrics.record_request(outcome, time.perf_counter() - started)
-
-
-class BatchExtractMetadataView(RequestIdMixin, APIView):
-    """POST /api/v1/extract/batch/ — extract metadata from several uploaded files, one after another.
-
-    Every file goes through the same extraction as `/extract/`, so its entry equals what that route
-    returns for it. A file that cannot be processed gets an `errors` entry in its place; the others
-    are unaffected, so the response is `200` whenever the request itself was acceptable.
-    """
-
-    schema = BatchExtractAutoSchema()
-
-    def post(self, request):
-        try:
-            check_declared_length(request.META.get("CONTENT_LENGTH"))
-            serializer = BatchExtractionRequestSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-        except (ValidationError, PayloadTooLarge):
-            metrics.record_batch("rejected")
-            raise
-        data = serializer.validated_data
-        uploads = data["files"]
-
-        entries = []
-        with tempfile.TemporaryDirectory(dir=settings.MES_JOB_UPLOAD_DIR) as work_dir:
-            for index, (upload, described) in enumerate(zip(uploads, data["per_file"])):
-                entries.append(self._extract_one(request, work_dir, index, upload, **described))
-        metrics.record_batch(metrics.classify_batch(entries), len(entries))
-        return Response({"results": entries})
-
-    @staticmethod
-    def _extract_one(
-        request, work_dir, index, upload, *, puid, mime_type, object_identifier, object_identifier_type
-    ) -> dict:
-        started = time.perf_counter()
-        outcome = "error"
-        entry = {"index": index, "filename": upload.name}
-        request_id = f"{request.mes_request_id}-{index}"
-        extra = {"request_id": request_id}
-        try:
-            metrics.record_upload(upload.size)
-            # One directory per file, so equal filenames can never share a path.
-            file_dir = os.path.join(work_dir, str(index))
-            os.mkdir(file_dir)
-            path = save_upload(upload, file_dir)
-            result = ExtractionOrchestrator().extract(
-                path,
-                puid=puid,
-                mime_type=mime_type,
-                request_id=request_id,
-                filename=upload.name,
-            )
-            metrics.record_tool_results(result.results)
-            outcome = metrics.classify_outcome(result)
-            entry["result"] = serialize_extraction_result(
-                result,
-                request_id,
-                upload.name,
-                object_identifier=object_identifier,
-                object_identifier_type=object_identifier_type,
-            )
-        except ToolNotConfigured as exc:
-            logger.error("tool not configured: %s", exc, extra=extra)
-            entry["errors"] = [str(exc)]
-        except Exception:
-            logger.exception("Unhandled error while extracting a file of a batch", extra=extra)
-            entry["errors"] = ["An unexpected error occurred while processing the file."]
-        finally:
-            metrics.record_request(outcome, time.perf_counter() - started)
-        return entry
 
 
 class JobsAtCapacity(APIException):
@@ -195,6 +131,8 @@ class JobNotFinished(APIException):
 
 class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
     """POST /api/v1/jobs/ — queue an extraction; same multipart body as `/extract/`."""
+
+    renderer_classes = [JSONRenderer]  # an envelope, not a result: JSON only, XML is answered with 406
 
     schema = JobSubmitAutoSchema()
 
@@ -235,6 +173,8 @@ class JobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
 
 class BatchJobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
     """POST /api/v1/jobs/batch/ — queue one ordinary job per uploaded file, all or none."""
+
+    renderer_classes = [JSONRenderer]  # an envelope, not a result: JSON only, XML is answered with 406
 
     schema = BatchJobSubmitAutoSchema()
 
@@ -288,6 +228,8 @@ class BatchJobSubmitView(AsyncEnabledMixin, RequestIdMixin, APIView):
 class BatchJobStatusView(AsyncEnabledMixin, RequestIdMixin, APIView):
     """GET /api/v1/job-batches/{batch_id}/ — the batch with the current status of each file's job."""
 
+    renderer_classes = [JSONRenderer]  # an envelope, not a result: JSON only, XML is answered with 406
+
     schema = BatchJobStatusAutoSchema()
 
     def get(self, request, batch_id):
@@ -307,6 +249,8 @@ def _get_job_or_404(job_id):
 class JobStatusView(AsyncEnabledMixin, RequestIdMixin, APIView):
     """GET /api/v1/jobs/{job_id}/ — the job envelope."""
 
+    renderer_classes = [JSONRenderer]  # an envelope, not a result: JSON only, XML is answered with 406
+
     schema = JobStatusAutoSchema()
 
     def get(self, request, job_id):
@@ -315,6 +259,8 @@ class JobStatusView(AsyncEnabledMixin, RequestIdMixin, APIView):
 
 class JobResultView(AsyncEnabledMixin, RequestIdMixin, APIView):
     """GET /api/v1/jobs/{job_id}/result/ — the `mes-result` document of a succeeded job."""
+
+    renderer_classes = [JSONRenderer, PremisXMLRenderer]  # a result: JSON or PREMIS XML, `application/xml` is a 406
 
     schema = JobResultAutoSchema()
 

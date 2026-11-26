@@ -43,7 +43,6 @@ class JobsViewTestCase(TestCase):
 
     def submit(self, **fields):
         fields.setdefault("file", _upload())
-        fields.setdefault("mime_type", "image/jpeg")
         return self.client.post(SUBMIT, fields, format="multipart")
 
 
@@ -66,15 +65,16 @@ class SubmitAndFetchTests(JobsViewTestCase):
         result = self.client.get(f"{SUBMIT}{job_id}/result/")
         self.assertEqual(result.status_code, 200)
         sync = self.client.post(
-            "/api/v1/extract/", {"file": _upload(), "mime_type": "image/jpeg"}, format="multipart"
+            "/api/v1/extract/", {"file": _upload()}, format="multipart"
         ).json()
         async_body = result.json()
         for body in (sync, async_body):
             body.pop("request_id")
             body["provenance"].pop("timestamp")
-            event = body["provenance"]["event"]
-            event.pop("eventDateTime")
-            event.pop("eventIdentifier")  # both differ per request
+            # event, agent and link UUIDs, times and command lines differ per request
+            body["provenance"].pop("events")
+            body["provenance"].pop("agents")
+            body["provenance"]["object"].pop("linkingEventIdentifier")
             for item in body["results"]:
                 item.pop("started_at")
                 item.pop("finished_at")
@@ -84,33 +84,30 @@ class SubmitAndFetchTests(JobsViewTestCase):
     def test_async_result_carries_the_object_identifier_like_the_sync_result(self, _run):
         ids = {"object_identifier": "u-1", "object_identifier_type": "UUID"}
         job_id = self.submit(**ids).json()["job_id"]
-        link = self.client.get(f"{SUBMIT}{job_id}/result/").json()["provenance"]["event"][
-            "linkingObjectIdentifier"
-        ]
+        link = self.client.get(f"{SUBMIT}{job_id}/result/").json()["provenance"]["object"]["objectIdentifier"]
         sync = self.client.post(
             "/api/v1/extract/",
-            {"file": _upload(), "mime_type": "image/jpeg", **ids},
+            {"file": _upload(), **ids},
             format="multipart",
-        ).json()["provenance"]["event"]["linkingObjectIdentifier"]
+        ).json()["provenance"]["object"]["objectIdentifier"]
         self.assertEqual(link, sync)
-        self.assertEqual(link[0]["linkingObjectIdentifierValue"], "u-1")
+        self.assertEqual(link[0]["objectIdentifierValue"], "u-1")
 
     def test_one_object_identifier_field_is_a_400(self, _run):
         self.assertEqual(self.submit(object_identifier="u-1").status_code, 400)
 
-    def test_result_as_xml(self, _run):
+    def test_result_as_application_xml_is_not_acceptable(self, _run):
         job_id = self.submit().json()["job_id"]
         response = self.client.get(f"{SUBMIT}{job_id}/result/", HTTP_ACCEPT="application/xml")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("application/xml", response["Content-Type"])
-        self.assertIn(b"<extractionResult", response.content)
+        self.assertEqual(response.status_code, 406)
+        self.assertIn("application/json", response["Content-Type"])
 
-    def test_envelope_as_xml(self, _run):
-        response = self.client.post(
-            SUBMIT, {"file": _upload()}, format="multipart", HTTP_ACCEPT="application/xml"
-        )
-        self.assertEqual(response.status_code, 202)
-        self.assertIn(b"<jobId>", response.content)
+    def test_result_as_premis_document(self, _run):
+        job_id = self.submit().json()["job_id"]
+        response = self.client.get(f"{SUBMIT}{job_id}/result/", HTTP_ACCEPT="application/premis+xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/premis+xml", response["Content-Type"])
+        self.assertIn(b"<premis:premis", response.content)
 
     def test_async_result_request_id_is_the_submitting_requests(self, _run):
         job_id = self.submit().json()["job_id"]
@@ -192,7 +189,7 @@ class AsyncDisabledTests(JobsViewTestCase):
     @mock.patch("apps.extraction.adapters.base.subprocess.run", return_value=_tool_output())
     def test_sync_extract_is_unaffected(self, _run):
         response = self.client.post(
-            "/api/v1/extract/", {"file": _upload(), "mime_type": "image/jpeg"}, format="multipart"
+            "/api/v1/extract/", {"file": _upload()}, format="multipart"
         )
         self.assertEqual(response.status_code, 200)
 
@@ -272,7 +269,7 @@ class DefaultServiceTests(TestCase):
     @mock.patch("apps.extraction.adapters.base.subprocess.run", return_value=_tool_output())
     def test_job_finishes_on_the_background_pool(self, _run):
         client = APIClient()
-        response = client.post(SUBMIT, {"file": _upload(), "mime_type": "image/jpeg"}, format="multipart")
+        response = client.post(SUBMIT, {"file": _upload()}, format="multipart")
         self.assertEqual(response.status_code, 202)
         job_id = response.json()["job_id"]
         deadline = time.monotonic() + 10

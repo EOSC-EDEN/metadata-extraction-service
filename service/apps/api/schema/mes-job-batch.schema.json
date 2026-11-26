@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:eden:mes:job-batch:1",
   "title": "MES job batch envelope",
-  "description": "Response of POST /api/v1/jobs/batch/ (202) and GET /api/v1/job-batches/{batch_id}/. One ordinary job per uploaded file, in upload order; each file's result is served by GET /api/v1/jobs/{job_id}/result/. The batch status is computed from the jobs: pending (all pending), running (any running, or pending mixed with finished), succeeded (all succeeded), failed (all failed) or partial (all finished, some failed). The XML representation (mes-job-batch.xsd) carries the same content.",
+  "description": "Response of POST /api/v1/jobs/batch/ (202) and GET /api/v1/job-batches/{batch_id}/. One ordinary job per uploaded file, in upload order; each file's result is served by GET /api/v1/jobs/{job_id}/result/. The batch status is computed from the jobs: pending (all pending), running (any running, or pending mixed with finished), succeeded (all succeeded), failed (all failed) or partial (all finished, some failed). JSON only: a request for XML is answered with 406.",
   "type": "object",
   "additionalProperties": false,
   "required": ["batch_id", "created_at", "status", "jobs"],

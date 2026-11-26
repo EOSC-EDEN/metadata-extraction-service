@@ -44,11 +44,13 @@ The response is JSON. The parts to look at:
 
 ## 3. Ask for XML
 
+The XML form is the PREMIS 3 document of the extraction:
+
 ```bash
-curl -s -H 'Accept: application/xml' -F file=@photo.jpg http://localhost:8000/api/v1/extract/
+curl -s -H 'Accept: application/premis+xml' -F file=@photo.jpg http://localhost:8000/api/v1/extract/
 ```
 
-The XML has the same content, and a schema at `/api/v1/schema/result.xsd`.
+It holds the file object, one event per tool and the agents (see [the result container](../reference/result-container.md)). `Accept: application/xml` is answered with `406`.
 
 ## 4. Run it as an asynchronous job
 
@@ -102,9 +104,9 @@ The first call returns `202 Accepted` with a `job_id`. Poll the second until `st
         comment[0]: TITLE=MES demo tone
         comment[1]: ARTIST=EOSC EDEN
 
-    $ curl -s -H 'Accept: application/xml' -F file=@sample.flac http://localhost:8000/api/v1/extract/ | head -c 300
+    $ curl -s -H 'Accept: application/premis+xml' -F file=@sample.flac http://localhost:8000/api/v1/extract/ | head -c 300
     <?xml version='1.0' encoding='utf-8'?>
-    <extractionResult xmlns="urn:eden:mes:result:1" ...
+    <premis:premis xmlns:premis="http://www.loc.gov/premis/v3" ...
 
     $ curl -s http://localhost:8000/api/v1/jobs/<job_id>/
     {"job_id":"<job_id>","status":"succeeded","created_at":"...","errors":[]}

@@ -38,7 +38,7 @@ Edit or replace any of these rules to fit your deployment.
 curl -s http://localhost:8000/api/v1/local-rules/
 ```
 
-A result reports its selection in `tool_resolution.selection_method` (`local_rule`, or `local_rule_via_ffis` when FFIS supplied the PUID), the rule names in `tool_resolution.matched_rules` and `provenance.matched_rules`, and in the PREMIS event detail.
+A result reports its selection in `tool_resolution.selection_method` (`local_rule`, or `local_rule_via_ffis` when FFIS supplied the PUID), the rule names in `tool_resolution.matched_rules` and `provenance.matched_rules`, and in the `Tools run: …` detail of the PREMIS summary event.
 
 !!! warning
     The file is re-read when it changes. If it becomes invalid, requests fail until it is fixed, so edit it atomically (write a temporary file, then rename it).
