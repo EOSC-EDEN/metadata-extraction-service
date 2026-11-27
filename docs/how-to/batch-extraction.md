@@ -12,15 +12,15 @@ curl -s http://localhost:8000/api/v1/jobs/<job_id>/result/
 
 ## Rules
 
-- At most `MES_MAX_FILES_PER_REQUEST` files (default 10; more is `400`). `MES_MAX_UPLOAD_BYTES` applies to the whole request body (`413`).
-- `puid` and `mime_type` are optional and apply to every file that has no value of its own (see [Describe individual files](#describe-individual-files)); without them each file is identified separately by FFIS, when it is enabled.
-- A request-level `object_identifier` or `object_identifier_type` is not accepted (`400`), because one identifier cannot name several files. Give it per file instead. A file without its own is linked in its PREMIS event by type `filepath` and the uploaded filename.
+- At most `MES_MAX_FILES_PER_REQUEST` files can be sent (the default is 10; more returns `400`). `MES_MAX_UPLOAD_BYTES` applies to the whole request body (a larger body returns `413`).
+- `puid` and `mime_type` are optional and apply to every file that has no value of its own (see [Describe individual files](#describe-individual-files)). Without them, each file is identified separately by FFIS, when it is enabled.
+- A request-level `object_identifier` or `object_identifier_type` is not accepted (returns `400`), because one identifier cannot name several files. Instead, give an identifier per file. A file without its own identifier is identified in its PREMIS event by type `filepath` and the uploaded filename.
 - Each file's job gets its own `request_id` (`<request id>-<index>`) in the logs and the PREMIS event.
-- Problems with the request itself (no files, an empty file, too many files, too large, an object identifier, malformed multipart) make the whole request invalid: `400` or `413` with `{"errors": [...]}`, and no job is created.
+- Problems with the request itself (for example no files, an empty file, too many files, too large, an object identifier at request level, malformed multipart) make the whole request invalid. The service returns `400` or `413` with `{"errors": [...]}`, and no job is created.
 - Admission is all or nothing: if the job store cannot take every file (`MES_ASYNC_MAX_JOBS`), the whole batch is refused with `503` and no job is created.
 - The aggregate `status` is `pending`, `running`, `succeeded`, `failed` or `partial` (all finished, some failed).
 - A batch expires as a whole, `MES_JOB_TTL_SECONDS` after its last job finished. Then the batch and all its jobs answer `404`.
-- Out of scope: unpacking archives.
+- Unpacking archives is out of scope.
 
 ## Describe individual files
 
@@ -63,8 +63,16 @@ finally:
         fh.close()
 ```
 
-- Each entry takes `puid`, `mime_type`, `object_identifier` and `object_identifier_type`, with the same limits and rules as on `/extract/`: give the identifier and its type together, and blank counts as not given. Values are strings; a `null` value inside an entry is refused (`400`). Setting the whole entry to `null`, or to `{}`, means nothing for that file.
+- Each entry takes `puid`, `mime_type`, `object_identifier` and `object_identifier_type`, with the same limits and rules as on `/extract/`.
+    - Give the identifier and its type together (blank counts as not given).
+    - Values are strings. A `null` value inside an entry is refused (returns `400`).
+    - Setting the whole entry to `null`, or to `{}`, means you give no values for that file. The file is then treated as if it had no entry: request-level values apply, or the file is identified as usual. Nothing is left out of its result.
 - A file's own `puid` or `mime_type` replaces the request-level one; other files keep the request-level value.
-- The entries are matched by filename, never by position, so the order of the files and of the keys does not matter. The key is the filename as MES reports it in the response's `filename`: without any directory part, so a file uploaded as `dir/a.jpg` is keyed `a.jpg`.
-- The request is refused with `400`, naming the key, and nothing is extracted or queued, when a key matches no uploaded file (a typo), when it matches two or more uploaded files with the same name, when `file_metadata` is not a JSON object, when an entry is not an object or has an unknown field (the removed properties, such as `format_name`, are unknown fields), or when a value breaks a rule.
-- Several files may share a filename, as long as none of them has an entry.
+- The entries are matched by filename, not by position, so the order of the files and of the keys does not matter. The key is the filename as MES reports it in the response's `filename`, without any directory part (so a file uploaded as `dir/a.jpg` is keyed `a.jpg`).
+- The request is refused with `400`, naming the key, and nothing is extracted or queued, when:
+    - a key matches no uploaded file (a typo);
+    - a key matches two or more uploaded files with the same name;
+    - `file_metadata` is not a JSON object;
+    - an entry is not an object or has an unknown field (the removed properties, such as `format_name`, are unknown fields);
+    - a value breaks a rule.
+- Several uploaded files may share a filename, as long as `file_metadata` has no key with that name.

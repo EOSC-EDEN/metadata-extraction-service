@@ -223,7 +223,7 @@ To change the script later, use **Replace** next to the command. Archivematica k
 
 ### With the SQL script
 
-The script below creates the same tool, command and default rule in one transaction. It was written for Archivematica 1.18 and is safe to run again: the tool and command use fixed UUIDs and the command text is refreshed.
+The script below creates the same tool, command and default rule in one transaction. It targets Archivematica 1.18. You can run it more than once: re-running it updates the command text and does not create duplicates.
 
 Save it as `archivematica-fpr.sql` and run it against the dashboard database (`MCP`) of the Archivematica Docker Compose setup:
 

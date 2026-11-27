@@ -10,7 +10,9 @@ The File Format Identification Service ([FFIS](https://github.com/EOSC-EDEN/eosc
 | `MES_FFIS_BASE_URL` | Base URL of a running FFIS, for example `http://host.docker.internal:8001`. |
 | `MES_FFIS_TIMEOUT_SECONDS` | Timeout of the call (default 30). |
 
-FFIS is called only when a request has no `puid` and no `mime_type`. When it was used, the result names it in `tool_resolution.identification_url` and passes its own provenance block through in `provenance.ffis`. The call is also recorded in the PREMIS provenance as a `format identification` event (its interval, the PUID and MIME type found, `success` or `fail`), linked to the FFIS agent; see [the result container](../reference/result-container.md).
+FFIS is called only when a request has no `puid` and no `mime_type`.
+
+If FFIS is used, this is recorded in `tool_resolution.identification_url`, and FFIS's own provenance block is passed through in `provenance.ffis`. The call is also recorded in the PREMIS provenance as a `format identification` event (its interval, the PUID and MIME type found, `success` or `fail`), linked to the FFIS agent; see [the result container](../reference/result-container.md).
 
 !!! note
     Port 8001 is also the port the `docs` compose profile publishes. If FFIS runs on the same host on 8001, publish one of them elsewhere.

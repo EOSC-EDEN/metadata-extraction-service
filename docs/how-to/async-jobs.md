@@ -19,7 +19,11 @@ Set `MES_ASYNC_ENABLED=false`. The `/jobs/` routes then answer `404`, `async_ena
 | `memory` (default) | Jobs are lost on restart and visible only to the process that created them. | Keep `WEB_CONCURRENCY=1` (use `GUNICORN_THREADS` for concurrency). With more processes a status request can answer `404 No such job`. |
 | `redis` | Jobs and results survive a restart and every gunicorn worker sees them. | Set `MES_REDIS_URL`. `WEB_CONCURRENCY` can be raised. |
 
-With Redis, a job still runs in the process that received the upload; if that worker is killed mid-job the job stays `running` until its TTL expires. Size Redis for `MES_ASYNC_MAX_JOBS` results (a result holds the raw output of every tool, so it can be large). With `appendonly` persistence, Redis keeps the jobs across its own restart too.
+With Redis, a job continues to run in the process that received the upload. If that process is stopped abruptly mid-job (for example, killed because it ran out of memory), the job stays `running` until its TTL expires.
+
+Size Redis to account for `MES_ASYNC_MAX_JOBS` results. A result holds the raw output of every tool, so results can be large.
+
+With `appendonly` persistence, Redis also keeps the jobs after its own restart.
 
 ## Start Redis and the purge job
 
